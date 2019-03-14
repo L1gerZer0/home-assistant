@@ -19,6 +19,7 @@ import zigpy_zigate.api
 import zigpy_zigate.zigbee.application
 
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR
+from homeassistant.components.climate import DOMAIN as CLIMATE
 from homeassistant.components.device_tracker import DOMAIN as DEVICE_TRACKER
 from homeassistant.components.fan import DOMAIN as FAN
 from homeassistant.components.light import DOMAIN as LIGHT
@@ -51,6 +52,7 @@ BINARY_SENSOR_CLUSTERS = SetRegistry()
 BINARY_SENSOR_TYPES = {}
 BINDABLE_CLUSTERS = SetRegistry()
 CHANNEL_ONLY_CLUSTERS = SetRegistry()
+CLIMATE_CLUSTERS = SetRegistry()
 CLUSTER_REPORT_CONFIGS = {}
 CUSTOM_CLUSTER_MAPPINGS = {}
 DEVICE_CLASS = collections.defaultdict(dict)
@@ -70,6 +72,7 @@ SMARTTHINGS_HUMIDITY_CLUSTER = 0xFC45
 
 COMPONENT_CLUSTERS = {
     BINARY_SENSOR: BINARY_SENSOR_CLUSTERS,
+    CLIMATE: CLIMATE_CLUSTERS,
     DEVICE_TRACKER: DEVICE_TRACKER_CLUSTERS,
     LIGHT: LIGHT_CLUSTERS,
     SWITCH: SWITCH_CLUSTERS,
@@ -134,6 +137,7 @@ def establish_device_mappings():
             zigpy.profiles.zha.DeviceType.ON_OFF_LIGHT_SWITCH: SWITCH,
             zigpy.profiles.zha.DeviceType.ON_OFF_PLUG_IN_UNIT: SWITCH,
             zigpy.profiles.zha.DeviceType.SMART_PLUG: SWITCH,
+            zigpy.profiles.zha..DeviceType.THERMOSTAT: CLIMATE,
         }
     )
 
