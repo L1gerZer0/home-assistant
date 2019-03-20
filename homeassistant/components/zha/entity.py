@@ -20,6 +20,7 @@ from .core.const import (
     SIGNAL_REMOVE,
 )
 from .core.helpers import LogMixin
+from .core.registries import ZHAEntityRegistry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ ENTITY_SUFFIX = "entity_suffix"
 RESTART_GRACE_PERIOD = 7200  # 2 hours
 
 
-class ZhaEntity(RestoreEntity, LogMixin, entity.Entity):
+class ZhaEntity(RestoreEntity, entity.Entity, LogMixin, metaclass=ZHAEntityRegistry):
     """A base class for ZHA entities."""
 
     _domain = None  # Must be overridden by subclasses

@@ -4,8 +4,10 @@ Mapping registries for Zigbee Home Automation.
 For more details about this component, please refer to the documentation at
 https://home-assistant.io/integrations/zha/
 """
+from abc import ABCMeta
 import collections
 
+import attr
 import bellows.ezsp
 import bellows.zigbee.application
 import zigpy.profiles.zha
@@ -30,6 +32,7 @@ from homeassistant.components.switch import DOMAIN as SWITCH
 # importing channels updates registries
 from . import channels  # noqa: F401 pylint: disable=unused-import
 from .const import (
+    COMPONENTS,
     CONTROLLER,
     SENSOR_ACCELERATION,
     SENSOR_BATTERY,
@@ -137,7 +140,7 @@ def establish_device_mappings():
             zigpy.profiles.zha.DeviceType.ON_OFF_LIGHT_SWITCH: SWITCH,
             zigpy.profiles.zha.DeviceType.ON_OFF_PLUG_IN_UNIT: SWITCH,
             zigpy.profiles.zha.DeviceType.SMART_PLUG: SWITCH,
-            zigpy.profiles.zha..DeviceType.THERMOSTAT: CLIMATE,
+            zigpy.profiles.zha.DeviceType.THERMOSTAT: CLIMATE,
         }
     )
 
@@ -211,3 +214,69 @@ def establish_device_mappings():
     REMOTE_DEVICE_TYPES[zll.PROFILE_ID].append(zll.DeviceType.CONTROL_BRIDGE)
     REMOTE_DEVICE_TYPES[zll.PROFILE_ID].append(zll.DeviceType.CONTROLLER)
     REMOTE_DEVICE_TYPES[zll.PROFILE_ID].append(zll.DeviceType.SCENE_CONTROLLER)
+
+
+@attr.s(frozen=True)
+class MatchRule:
+    """Match a ZHA Entity to a channel name or generic id."""
+
+    channel_names = attr.ib(default=None)
+    generic_ids = attr.ib(default=None)
+    manufacturer = attr.ib(default=None)
+    model = attr.ib(default=None)
+
+
+@attr.s
+class Matches:
+    """Rule and ZHA Entity class."""
+
+    rule = attr.ib(type=MatchRule)
+    entity = attr.ib(default=None)
+
+
+class ZHAEntityRegistry(ABCMeta):
+    """Hold channel to ZHA Entity mapping."""
+
+    _registry = {component: {} for component in COMPONENTS}
+
+    def __new__(mcs, name, bases, dct):
+        """Init ZHA Entity class."""
+        ent = super().__new__(mcs, name, bases, dct)
+        if hasattr(ent, "strict_match"):
+            mcs._registry[ent._domain][ent.strict_match] = ent
+        return ent
+
+    @classmethod
+    def match_entity(mcs, component, zha_device, chnls, entity=None):
+        """Match a ZHA Channels to a ZHA Entity class."""
+        for match in mcs._registry[component]:
+            if mcs._matched(zha_device, chnls, match):
+                return mcs._registry[component][match]
+
+        return entity
+
+    @staticmethod
+    def _matched(zha_device, chnls, match: MatchRule):
+        """Return True is this device matches the criteria."""
+        if not any(attr.asdict(match).values()):
+            return False
+
+        ch_m = True
+        if match.channel_names:
+            channel_names = (ch.name for ch in chnls)
+            ch_m = match.channel_names in channel_names
+
+        id_m = True
+        if match.generic_ids:
+            all_generic_ids = (ch.generic_id for ch in chnls.values())
+            id_m = match.generic_ids in all_generic_ids
+
+        manufacturer_m = True
+        if match.manufacturer:
+            manufacturer_m = zha_device.manufacturer == match.manufacturer
+
+        model_m = True
+        if match.model:
+            model_m = zha_device.manufacturer == match.manufacturer
+
+        return all((ch_m, id_m, manufacturer_m, model_m))
