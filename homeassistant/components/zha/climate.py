@@ -25,8 +25,13 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.temperature import convert_temperature
 
 from .core.const import (
-    DATA_ZHA, DATA_ZHA_DISPATCHERS, SIGNAL_ATTR_UPDATED, THERMOSTAT_CHANNEL,
-    ZHA_DISCOVERY_NEW)
+    DATA_ZHA,
+    DATA_ZHA_DISPATCHERS,
+    SIGNAL_ATTR_UPDATED,
+    THERMOSTAT_CHANNEL,
+    ZHA_DISCOVERY_NEW,
+)
+from .core.registries import MatchRule, ZHAEntityRegistry
 from .entity import ZhaEntity
 
 DEPENDENCIES = ['zha']
@@ -122,15 +127,12 @@ async def _async_setup_entities(hass, config_entry, async_add_entities,
 
 async def get_climate(discovery_info):
     """Create ZHA climate entity."""
-    zha_dev = discovery_info.get('zha_device')
-    if zha_dev is not None:
-        manufacturer = zha_dev.manufacturer
-        if manufacturer.startswith('Sinope Technologies'):
-            thermostat = SinopeTechnologiesThermostat(**discovery_info)
-    else:
-        thermostat = Thermostat(**discovery_info)
 
-    return thermostat
+    zha_dev = discovery_info["zha_device"]
+    channels = discovery_info["channels"]
+
+    entity = ZHAEntityRegistry.match_entity(DOMAIN, zha_dev, channels, Thermostat)
+    return entity(**discovery_info)
 
 
 class Thermostat(ZhaEntity, ClimateDevice):
@@ -407,6 +409,7 @@ class SinopeTechnologiesThermostat(Thermostat):
     _features = SUPPORT_OPERATION_MODE | SUPPORT_AWAY_MODE
     manufacturer = 0x119c
     update_time_interval = timedelta(minutes=15)
+    strict_match = MatchRule(manufacturer="Sinope Technologies")
 
     async def async_added_to_hass(self):
         """Run when about to be added to Hass."""

@@ -35,6 +35,7 @@ from .core.const import (
     UNKNOWN,
     ZHA_DISCOVERY_NEW,
 )
+from .core.registries import ZHAEntityRegistry
 from .entity import ZhaEntity
 
 PARALLEL_UPDATES = 5
@@ -206,7 +207,12 @@ async def _async_setup_entities(
 
 async def make_sensor(discovery_info):
     """Create ZHA sensors factory."""
-    return Sensor(**discovery_info)
+
+    zha_dev = discovery_info["zha_device"]
+    channels = discovery_info["channels"]
+
+    entity = ZHAEntityRegistry.match_entity(DOMAIN, zha_dev, channels, Sensor)
+    return entity(**discovery_info)
 
 
 class Sensor(ZhaEntity):
