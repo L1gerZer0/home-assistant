@@ -33,6 +33,63 @@ REPORT_CONFIG_CLIMATE_DEMAND = (REPORT_CONFIG_MIN_INT, REPORT_CONFIG_MAX_INT, 5)
 REPORT_CONFIG_CLIMATE_DISCRETE = (REPORT_CONFIG_MIN_INT, REPORT_CONFIG_MAX_INT, 1)
 
 
+@registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Dehumidification.cluster_id)
+class Dehumidification(ZigbeeChannel):
+    """Dehumidification channel."""
+
+    pass
+
+
+@registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Fan.cluster_id)
+class FanChannel(ZigbeeChannel):
+    """Fan channel."""
+
+    _value_attribute = 0
+
+    REPORT_CONFIG = ({"attr": "fan_mode", "config": REPORT_CONFIG_OP},)
+
+    async def async_set_speed(self, value) -> None:
+        """Set the speed of the fan."""
+
+        try:
+            await self.cluster.write_attributes({"fan_mode": value})
+        except DeliveryError as ex:
+            self.error("Could not set speed: %s", ex)
+            return
+
+    async def async_update(self):
+        """Retrieve latest state."""
+        result = await self.get_attribute_value("fan_mode", from_cache=True)
+
+        async_dispatcher_send(
+            self._zha_device.hass, f"{self.unique_id}_{SIGNAL_ATTR_UPDATED}", result
+        )
+
+    @callback
+    def attribute_updated(self, attrid, value):
+        """Handle attribute update from fan cluster."""
+        attr_name = self.cluster.attributes.get(attrid, [attrid])[0]
+        self.debug(
+            "Attribute report '%s'[%s] = %s", self.cluster.name, attr_name, value
+        )
+        if attrid == self._value_attribute:
+            async_dispatcher_send(
+                self._zha_device.hass, f"{self.unique_id}_{SIGNAL_ATTR_UPDATED}", value
+            )
+
+    async def async_initialize(self, from_cache):
+        """Initialize channel."""
+        await self.get_attribute_value(self._value_attribute, from_cache=from_cache)
+        await super().async_initialize(from_cache)
+
+
+@registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Pump.cluster_id)
+class Pump(ZigbeeChannel):
+    """Pump channel."""
+
+    pass
+
+
 @registries.CLIMATE_CLUSTERS.register(hvac.Thermostat.cluster_id)
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Thermostat.cluster_id)
 class ThermostatChannel(ZigbeeChannel):
@@ -356,63 +413,6 @@ class ThermostatChannel(ZigbeeChannel):
         msg = "%s: " + msg
         args = (self.unique_id,) + args
         _LOGGER.log(level, msg, *args)
-
-
-@registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Dehumidification.cluster_id)
-class Dehumidification(ZigbeeChannel):
-    """Dehumidification channel."""
-
-    pass
-
-
-@registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Fan.cluster_id)
-class FanChannel(ZigbeeChannel):
-    """Fan channel."""
-
-    _value_attribute = 0
-
-    REPORT_CONFIG = ({"attr": "fan_mode", "config": REPORT_CONFIG_OP},)
-
-    async def async_set_speed(self, value) -> None:
-        """Set the speed of the fan."""
-
-        try:
-            await self.cluster.write_attributes({"fan_mode": value})
-        except DeliveryError as ex:
-            self.error("Could not set speed: %s", ex)
-            return
-
-    async def async_update(self):
-        """Retrieve latest state."""
-        result = await self.get_attribute_value("fan_mode", from_cache=True)
-
-        async_dispatcher_send(
-            self._zha_device.hass, f"{self.unique_id}_{SIGNAL_ATTR_UPDATED}", result
-        )
-
-    @callback
-    def attribute_updated(self, attrid, value):
-        """Handle attribute update from fan cluster."""
-        attr_name = self.cluster.attributes.get(attrid, [attrid])[0]
-        self.debug(
-            "Attribute report '%s'[%s] = %s", self.cluster.name, attr_name, value
-        )
-        if attrid == self._value_attribute:
-            async_dispatcher_send(
-                self._zha_device.hass, f"{self.unique_id}_{SIGNAL_ATTR_UPDATED}", value
-            )
-
-    async def async_initialize(self, from_cache):
-        """Initialize channel."""
-        await self.get_attribute_value(self._value_attribute, from_cache=from_cache)
-        await super().async_initialize(from_cache)
-
-
-@registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.Pump.cluster_id)
-class Pump(ZigbeeChannel):
-    """Pump channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(hvac.UserInterface.cluster_id)
