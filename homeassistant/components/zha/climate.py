@@ -44,9 +44,9 @@ from homeassistant.helpers.temperature import convert_temperature
 from .core.const import (
     DATA_ZHA,
     DATA_ZHA_DISPATCHERS,
-    FAN_CHANNEL,
+    CHANNEL_FAN,
+    CHANNEL_THERMOSTAT,
     SIGNAL_ATTR_UPDATED,
-    THERMOSTAT_CHANNEL,
     ZHA_DISCOVERY_NEW,
 )
 from .core.registries import MatchRule, ZHAEntityRegistry
@@ -190,11 +190,11 @@ class Thermostat(ZhaEntity, ClimateDevice):
     def __init__(self, **kwargs):
         """Initialize ZHA Thermostat instance."""
         super().__init__(**kwargs)
-        self._thrm = self.cluster_channels.get(THERMOSTAT_CHANNEL)
+        self._thrm = self.cluster_channels.get(CHANNEL_THERMOSTAT)
         self._preset = PRESET_NONE
         self._presets = None
         self._supported_flags = SUPPORT_TARGET_TEMPERATURE
-        self._fan = self.cluster_channels.get(FAN_CHANNEL)
+        self._fan = self.cluster_channels.get(CHANNEL_FAN)
         self._target_temp = None
         self._target_range = (None, None)
 
