@@ -7,14 +7,12 @@ from zigpy.zcl.foundation import Status
 from homeassistant.components.switch import DOMAIN, SwitchDevice
 from homeassistant.const import STATE_ON
 from homeassistant.core import callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .core.const import (
     CHANNEL_ON_OFF,
     DATA_ZHA,
-    DATA_ZHA_DISPATCHERS,
+    DATA_ZHA_ADD_ENTITIES,
     SIGNAL_ATTR_UPDATED,
-    ZHA_DISCOVERY_NEW,
 )
 from .core.registries import ZHA_ENTITIES
 from .entity import ZhaEntity
@@ -31,39 +29,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the Zigbee Home Automation switch from config entry."""
 
-    async def async_discover(discovery_info):
-        await _async_setup_entities(
-            hass, config_entry, async_add_entities, [discovery_info]
-        )
-
-    unsub = async_dispatcher_connect(
-        hass, ZHA_DISCOVERY_NEW.format(DOMAIN), async_discover
-    )
-    hass.data[DATA_ZHA][DATA_ZHA_DISPATCHERS].append(unsub)
-
-    switches = hass.data.get(DATA_ZHA, {}).get(DOMAIN)
-    if switches is not None:
-        await _async_setup_entities(
-            hass, config_entry, async_add_entities, switches.values()
-        )
-        del hass.data[DATA_ZHA][DOMAIN]
-
-
-async def _async_setup_entities(
-    hass, config_entry, async_add_entities, discovery_infos
-):
-    """Set up the ZHA switches."""
-    entities = []
-    for discovery_info in discovery_infos:
-        zha_dev = discovery_info["zha_device"]
-        channels = discovery_info["channels"]
-
-        entity = ZHA_ENTITIES.get_entity(DOMAIN, zha_dev, channels, Switch)
-        if entity:
-            entities.append(entity(**discovery_info))
-
-    if entities:
-        async_add_entities(entities, update_before_add=True)
+    hass.data[DATA_ZHA][DOMAIN][DATA_ZHA_ADD_ENTITIES] = async_add_entities
 
 
 @STRICT_MATCH(channel_names=CHANNEL_ON_OFF)
