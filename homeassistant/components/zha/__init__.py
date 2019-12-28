@@ -100,8 +100,13 @@ async def async_setup_entry(hass, config_entry):
         import zhaquirks  # noqa: F401 pylint: disable=unused-import, import-outside-toplevel, import-error
 
     zha_gateway = ZHAGateway(hass, config, config_entry)
-    await zha_gateway.async_initialize()
 
+    for component in COMPONENTS:
+        hass.async_create_task(
+            hass.config_entries.async_forward_entry_setup(config_entry, component)
+        )
+
+    await zha_gateway.async_initialize()
     device_registry = await hass.helpers.device_registry.async_get_registry()
     device_registry.async_get_or_create(
         config_entry_id=config_entry.entry_id,
@@ -111,11 +116,6 @@ async def async_setup_entry(hass, config_entry):
         manufacturer="ZHA",
         model=zha_gateway.radio_description,
     )
-
-    for component in COMPONENTS:
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(config_entry, component)
-        )
 
     api.async_load_api(hass)
 
