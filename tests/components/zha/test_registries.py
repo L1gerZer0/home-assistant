@@ -61,8 +61,20 @@ def channels():
         # manufacturer matching
         (registries.MatchRule(manufacturers="no match"), False),
         (registries.MatchRule(manufacturers=MANUFACTURER), True),
+        (
+            registries.MatchRule(manufacturers="no match", aux_channels="aux_channel"),
+            False,
+        ),
+        (
+            registries.MatchRule(
+                manufacturers=MANUFACTURER, aux_channels="aux_channel"
+            ),
+            True,
+        ),
         (registries.MatchRule(models=MODEL), True),
         (registries.MatchRule(models="no match"), False),
+        (registries.MatchRule(models=MODEL, aux_channels="aux_channel"), True),
+        (registries.MatchRule(models="no match", aux_channels="aux_channel"), False),
         # match everything
         (
             registries.MatchRule(
