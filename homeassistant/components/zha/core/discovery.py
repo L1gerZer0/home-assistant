@@ -5,7 +5,9 @@ For more details about this component, please refer to the documentation at
 https://home-assistant.io/integrations/zha/
 """
 
+import collections
 import logging
+import typing
 
 import zigpy.profiles
 from zigpy.zcl.clusters.general import OnOff, PowerConfiguration
@@ -27,82 +29,12 @@ from .registries import (
     SINGLE_OUTPUT_CLUSTER_DEVICE_CLASS,
     ZIGBEE_CHANNEL_REGISTRY,
 )
+from .typing import ChannelType, ZigpyEndpointType, ZigpyClusterType, ZhaDeviceType
 
 _LOGGER = logging.getLogger(__name__)
 
 
-@callback
-def async_process_endpoint(
-    hass,
-    config,
-    endpoint_id,
-    endpoint,
-    discovery_infos,
-    device,
-    zha_device,
-    is_new_join,
-):
-    """Process an endpoint on a zigpy device."""
-    if endpoint_id == 0:  # ZDO
-        _async_create_cluster_channel(
-            endpoint, zha_device, is_new_join, channel_class=ZDOChannel
-        )
-        return
 
-    component = None
-    profile_clusters = []
-    device_key = f"{device.ieee}-{endpoint_id}"
-    node_config = {}
-    if CONF_DEVICE_CONFIG in config:
-        node_config = config[CONF_DEVICE_CONFIG].get(device_key, {})
-
-    if endpoint.profile_id in zigpy.profiles.PROFILES:
-        if DEVICE_CLASS.get(endpoint.profile_id, {}).get(endpoint.device_type, None):
-            profile_info = DEVICE_CLASS[endpoint.profile_id]
-            component = profile_info[endpoint.device_type]
-
-    if ha_const.CONF_TYPE in node_config:
-        component = node_config[ha_const.CONF_TYPE]
-
-    if component and component in COMPONENTS and component in COMPONENT_CLUSTERS:
-        profile_clusters = COMPONENT_CLUSTERS[component]
-        if profile_clusters:
-            profile_match = _async_handle_profile_match(
-                hass,
-                endpoint,
-                profile_clusters,
-                zha_device,
-                component,
-                device_key,
-                is_new_join,
-            )
-            discovery_infos.append(profile_match)
-
-    discovery_infos.extend(
-        _async_handle_single_cluster_matches(
-            hass, endpoint, zha_device, profile_clusters, device_key, is_new_join
-        )
-    )
-
-
-@callback
-def _async_create_cluster_channel(
-    cluster, zha_device, is_new_join, channels=None, channel_class=None
-):
-    """Create a cluster channel and attach it to a device."""
-    # really ugly hack to deal with xiaomi using the door lock cluster
-    # incorrectly.
-    if hasattr(cluster, "ep_attribute") and cluster.ep_attribute == "multistate_input":
-        channel_class = AttributeListeningChannel
-    # end of ugly hack
-    if channel_class is None:
-        channel_class = ZIGBEE_CHANNEL_REGISTRY.get(
-            cluster.cluster_id, AttributeListeningChannel
-        )
-    channel = channel_class(cluster, zha_device)
-    zha_device.add_cluster_channel(channel)
-    if channels is not None:
-        channels.append(channel)
 
 
 @callback
@@ -271,3 +203,103 @@ def _async_handle_single_cluster_match(
     }
 
     return discovery_info
+
+
+class Discovery:
+    """All discovered channels and entities of a device."""
+
+    pass
+
+
+class DiscoveryEndpoint:
+    """All discovered channels and entities of an endpoint."""
+
+    def __init__(self, zha_device: ZhaDeviceType, endpoint: ZigpyEndpointType):
+        """Initialize instance."""
+        self._all_channels = {}
+        self._claimed_channels = {}
+        self._endpoint = endpoint
+        self._entities = collections.defaultdict(lambda: collections.defaultdict(list))
+        self._zha_device = zha_device
+
+    @property
+    def all_channels(self) -> typing.Dict[str, ChannelType]:
+        """All channels of an endpoint."""
+        return self._all_channels
+
+    @property
+    def claimed_channels(self) -> typing.Dict[str, ChannelType]:
+        """Channels in use."""
+        return self._claimed_channels
+
+    @property
+    def entities(self) -> typing.Dict[str, typing.List]:
+        """ZHA Entities discovered."""
+        return self._entities
+
+    @property
+    def id(self) -> int:
+        """Return endpoint id."""
+        return self._endpoint.endpoint_id
+
+    @classmethod
+    def new(cls, zha_device: ZhaDeviceType, endpoint: ZigpyEndpointType) -> "DiscoveryEndpoint":
+        """Create DiscoveryEndpoint instance from endpoint."""
+        r = cls(zha_device, endpoint)
+        for cluster in endpoint.in_clusters:
+            r.add_channel(cluster)
+
+    @callback
+    def add_channel(self, cluster: ZigpyClusterType) -> None:
+        """Create a cluster channel and attach it to a device."""
+        # really ugly hack to deal with xiaomi using the door lock cluster
+        # incorrectly.
+        if hasattr(cluster, "ep_attribute") and cluster.ep_attribute == "multistate_input":
+            channel_class = AttributeListeningChannel
+        # end of ugly hack
+
+        channel_class = ZIGBEE_CHANNEL_REGISTRY.get(cluster.cluster_id, AttributeListeningChannel)
+        channel = channel_class(cluster, self._zha_device)
+        self.all_channels[channel.channel_id] = channel
+
+    @callback
+    def async_process_endpoint(
+        self,
+    ):
+        """Process an endpoint on a zigpy device."""
+
+        component = None
+        profile_clusters = []
+        device_key = f"{self._zha_device.ieee}-{self.id}"
+        node_config = {}
+        if CONF_DEVICE_CONFIG in config:
+            node_config = config[CONF_DEVICE_CONFIG].get(device_key, {})
+
+        if endpoint.profile_id in zigpy.profiles.PROFILES:
+            if DEVICE_CLASS.get(endpoint.profile_id, {}).get(endpoint.device_type, None):
+                profile_info = DEVICE_CLASS[endpoint.profile_id]
+                component = profile_info[endpoint.device_type]
+
+        if ha_const.CONF_TYPE in node_config:
+            component = node_config[ha_const.CONF_TYPE]
+
+        if component and component in COMPONENTS and component in COMPONENT_CLUSTERS:
+            profile_clusters = COMPONENT_CLUSTERS[component]
+            if profile_clusters:
+                profile_match = _async_handle_profile_match(
+                    hass,
+                    endpoint,
+                    profile_clusters,
+                    zha_device,
+                    component,
+                    device_key,
+                    is_new_join,
+                )
+                discovery_infos.append(profile_match)
+
+        discovery_infos.extend(
+            _async_handle_single_cluster_matches(
+                hass, endpoint, zha_device, profile_clusters, device_key, is_new_join
+            )
+        )
+
