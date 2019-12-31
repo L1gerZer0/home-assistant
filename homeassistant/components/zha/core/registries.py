@@ -203,7 +203,9 @@ class ZHAEntityRegistry:
         """Match a ZHA Channels to a ZHA Entity class."""
         for match in self._strict_registry[component]:
             if self._strict_matched(zha_device, chnls, match):
-                return self._strict_registry[component][match]
+                entity = self._strict_registry[component][match]
+                entity.matched_rule = match
+                return entity
 
         return default
 
