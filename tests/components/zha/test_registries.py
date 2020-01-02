@@ -213,3 +213,35 @@ def test_registry_loose_matching(rule, matched, zha_device, channels):
     """Test loose rule matching."""
     reg = registries.ZHAEntityRegistry()
     assert reg._loose_matched(zha_device, channels, rule) is matched
+
+
+@pytest.mark.parametrize(
+    "rule, match",
+    [
+        (registries.MatchRule(channel_names={"level"}), {"level"}),
+        (registries.MatchRule(channel_names={"level", "no match"}), {"level"}),
+        (registries.MatchRule(channel_names={"on_off"}), {"on_off"}),
+        (registries.MatchRule(generic_ids="channel_0x0000"), {"basic"}),
+        (
+            registries.MatchRule(channel_names="level", generic_ids="channel_0x0000"),
+            {"basic", "level"},
+        ),
+        (registries.MatchRule(channel_names={"level", "power"}), {"level", "power"}),
+        (
+            registries.MatchRule(
+                channel_names={"level", "on_off"}, aux_channels={"basic", "power"}
+            ),
+            {"basic", "level", "on_off", "power"},
+        ),
+        (registries.MatchRule(channel_names={"color"}), set()),
+    ],
+)
+def test_match_rule_claim_channels(rule, match, channel, channels):
+    """Test channel claiming."""
+    ch_basic = channel("basic", 0)
+    channels.append(ch_basic)
+    ch_power = channel("power", 1)
+    channels.append(ch_power)
+
+    claimed = rule.claim_channels(channels)
+    assert match == set([ch.name for ch in claimed])
