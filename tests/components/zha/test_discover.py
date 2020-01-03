@@ -78,7 +78,7 @@ def zha_device_light_color(zha_device):
 @pytest.mark.parametrize("device", DEVICES)
 async def test_devices(device, zha_gateway: core_zha_gw.ZHAGateway, hass, config_entry):
     """Test device discovery."""
-    return
+
     zigpy_device = make_device(
         device["endpoints"],
         "00:11:22:33:44:55:66:77",
@@ -380,3 +380,122 @@ def test_discovery_endpoint_by_device_type_wrong_override(
     assert "2:0x0300" in disc_ep.all_channels
     assert not disc_ep.claimed_channels
     assert not disc_ep.entities[zha_const.FAN]
+
+
+@pytest.fixture
+def discovery_endpoint():
+    """Discovery endpoint fixture."""
+
+    def _disc_ep(zha_device, ep_id=1):
+        discovery = disc.Discovery(zha_device)
+        return disc.DiscoveryEndpoint(discovery, ep_id)
+
+    return _disc_ep
+
+
+@pytest.mark.parametrize(
+    "cluster_id, channel_name, component",
+    [
+        (1026, zha_const.CHANNEL_TEMPERATURE, zha_const.SENSOR),
+        (
+            zha_regs.SMARTTHINGS_ACCELERATION_CLUSTER,
+            zha_const.CHANNEL_ACCELEROMETER,
+            zha_const.BINARY_SENSOR,
+        ),
+        (6, zha_const.CHANNEL_ON_OFF, zha_const.SWITCH),
+        (0x202, zha_const.CHANNEL_FAN, zha_const.FAN),
+    ],
+)
+def test_discovery_endpoint_by_cluster_id(
+    cluster_id, channel_name, component, discovery_endpoint, zha_device
+):
+    """Test single cluster discovery."""
+
+    ep_data = {
+        "device_type": 24321,
+        "in_clusters": [cluster_id],
+        "out_clusters": [],
+        "profile_id": 260,
+    }
+    device = zha_device({2: ep_data})
+
+    get_entity_mock = mock.MagicMock()
+    entity_mock = mock.MagicMock()
+    get_entity_mock.return_value = (
+        entity_mock,
+        zha_regs.MatchRule(channel_names=channel_name),
+    )
+    with mock.patch(
+        "homeassistant.components.zha.core.registries.ZHA_ENTITIES.get_entity",
+        get_entity_mock,
+    ):
+        disc_ep = discovery_endpoint(device, 2)
+        disc_ep.add_all_channels()
+        disc_ep.handle_on_off_output_cluster_exception = mock.MagicMock()
+        disc_ep.discover_by_cluster_id()
+
+    assert disc_ep.handle_on_off_output_cluster_exception.call_count == 1
+    ch_id = f"2:0x{cluster_id:04x}"
+
+    assert ch_id in disc_ep.all_channels
+    assert len(disc_ep.all_channels) == 1
+
+    assert len(disc_ep.claimed_channels) == 1
+    assert ch_id in disc_ep.claimed_channels
+
+    assert disc_ep.entities[component][0] is entity_mock.return_value
+    assert len(disc_ep.entities[component]) == 1
+
+
+@pytest.mark.parametrize(
+    "cluster_id, channel_name, device_type, component, matched",
+    [
+        (6, zha_const.CHANNEL_ON_OFF, 1, zha_const.BINARY_SENSOR, True),
+        (6, zha_const.CHANNEL_ON_OFF, 6, zha_const.BINARY_SENSOR, False),
+    ],
+)
+def test_discovery_endpoint_out_clusters(
+    cluster_id,
+    channel_name,
+    device_type,
+    component,
+    matched,
+    discovery_endpoint,
+    zha_device,
+):
+    """Test single cluster discovery on_off output cluster handling as entity."""
+
+    ep_data = {
+        "device_type": device_type,
+        "in_clusters": [],
+        "out_clusters": [cluster_id],
+        "profile_id": 260,
+    }
+    device = zha_device({2: ep_data})
+
+    get_entity_mock = mock.MagicMock()
+    entity_mock = mock.MagicMock()
+    get_entity_mock.return_value = (
+        entity_mock,
+        zha_regs.MatchRule(channel_names=channel_name),
+    )
+    with mock.patch(
+        "homeassistant.components.zha.core.registries.ZHA_ENTITIES.get_entity",
+        get_entity_mock,
+    ):
+        disc_ep = discovery_endpoint(device, 2)
+        disc_ep.add_all_channels()
+        disc_ep.handle_on_off_output_cluster_exception()
+
+    ch_id = f"2:0x{cluster_id:04x}"
+
+    assert not disc_ep.all_channels
+
+    if matched:
+        assert len(disc_ep.claimed_channels) == 1
+        assert ch_id in disc_ep.claimed_channels
+        assert disc_ep.entities[component][0] is entity_mock.return_value
+        assert len(disc_ep.entities[component]) == 1
+    else:
+        assert not disc_ep.claimed_channels
+        assert not disc_ep.entities[component]

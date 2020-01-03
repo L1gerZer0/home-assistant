@@ -1872,3 +1872,4 @@ DEVICES = [
         "model": "Z01-A19NAE26",
     },
 ]
+DEVICES = []
