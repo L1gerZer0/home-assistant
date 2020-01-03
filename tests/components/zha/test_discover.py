@@ -227,8 +227,12 @@ def test_discovery_endpoint_by_device_type(m1, m2, zha_device_light_color):
     """Test entity discovery."""
 
     get_entity_mock = mock.MagicMock()
-    get_entity_mock.return_value.matched_rule = zha_regs.MatchRule(
-        channel_names="on_off", aux_channels={"level", "light_color"}
+    entity_mock = mock.MagicMock()
+    get_entity_mock.return_value = (
+        entity_mock,
+        zha_regs.MatchRule(
+            channel_names="on_off", aux_channels={"level", "light_color"}
+        ),
     )
     with mock.patch(
         "homeassistant.components.zha.core.registries.ZHA_ENTITIES.get_entity",
@@ -243,10 +247,7 @@ def test_discovery_endpoint_by_device_type(m1, m2, zha_device_light_color):
     assert "2:0x0006" in disc_ep.claimed_channels
     assert "2:0x0008" in disc_ep.claimed_channels
     assert "2:0x0300" in disc_ep.claimed_channels
-    assert (
-        disc_ep.entities[zha_const.LIGHT][0]
-        is get_entity_mock.return_value.return_value
-    )
+    assert disc_ep.entities[zha_const.LIGHT][0] is entity_mock.return_value
 
 
 @mock.patch(
@@ -259,8 +260,12 @@ def test_discovery_endpoint_by_device_type_dimmable(m1, m2, zha_device_light_dim
     """Test entity discovery."""
 
     get_entity_mock = mock.MagicMock()
-    get_entity_mock.return_value.matched_rule = zha_regs.MatchRule(
-        channel_names="on_off", aux_channels={"level", "light_color"}
+    entity_mock = mock.MagicMock()
+    get_entity_mock.return_value = (
+        entity_mock,
+        zha_regs.MatchRule(
+            channel_names="on_off", aux_channels={"level", "light_color"}
+        ),
     )
     with mock.patch(
         "homeassistant.components.zha.core.registries.ZHA_ENTITIES.get_entity",
@@ -275,10 +280,7 @@ def test_discovery_endpoint_by_device_type_dimmable(m1, m2, zha_device_light_dim
     assert "2:0x0006" in disc_ep.claimed_channels
     assert "2:0x0008" in disc_ep.claimed_channels
     assert "2:0x0300" not in disc_ep.claimed_channels
-    assert (
-        disc_ep.entities[zha_const.LIGHT][0]
-        is get_entity_mock.return_value.return_value
-    )
+    assert disc_ep.entities[zha_const.LIGHT][0] is entity_mock.return_value
 
 
 @mock.patch(
@@ -291,8 +293,12 @@ def test_discovery_endpoint_by_device_type_on_off(m1, m2, zha_device_light_on_of
     """Test entity discovery."""
 
     get_entity_mock = mock.MagicMock()
-    get_entity_mock.return_value.matched_rule = zha_regs.MatchRule(
-        channel_names="on_off", aux_channels={"level", "light_color"}
+    entity_mock = mock.MagicMock()
+    get_entity_mock.return_value = (
+        entity_mock,
+        zha_regs.MatchRule(
+            channel_names="on_off", aux_channels={"level", "light_color"}
+        ),
     )
     with mock.patch(
         "homeassistant.components.zha.core.registries.ZHA_ENTITIES.get_entity",
@@ -307,10 +313,7 @@ def test_discovery_endpoint_by_device_type_on_off(m1, m2, zha_device_light_on_of
     assert "2:0x0006" in disc_ep.claimed_channels
     assert "2:0x0008" not in disc_ep.claimed_channels
     assert "2:0x0300" not in disc_ep.claimed_channels
-    assert (
-        disc_ep.entities[zha_const.LIGHT][0]
-        is get_entity_mock.return_value.return_value
-    )
+    assert disc_ep.entities[zha_const.LIGHT][0] is entity_mock.return_value
 
 
 @mock.patch(
@@ -323,8 +326,10 @@ def test_discovery_endpoint_by_device_type_override(m1, m2, zha_device_light_col
     """Test entity discovery with override to switch component."""
 
     get_entity_mock = mock.MagicMock()
-    get_entity_mock.return_value.matched_rule = zha_regs.MatchRule(
-        channel_names=zha_const.CHANNEL_ON_OFF
+    entity_mock = mock.MagicMock()
+    get_entity_mock.return_value = (
+        entity_mock,
+        zha_regs.MatchRule(channel_names=zha_const.CHANNEL_ON_OFF),
     )
     device_key = f"{zha_device_light_color.ieee}-2"
     device_overrides = {device_key: {"type": "switch"}}
@@ -343,10 +348,7 @@ def test_discovery_endpoint_by_device_type_override(m1, m2, zha_device_light_col
     assert "2:0x0006" in disc_ep.claimed_channels
     assert "2:0x0008" not in disc_ep.claimed_channels
     assert "2:0x0300" not in disc_ep.claimed_channels
-    assert (
-        disc_ep.entities[zha_const.SWITCH][0]
-        is get_entity_mock.return_value.return_value
-    )
+    assert disc_ep.entities[zha_const.SWITCH][0] is entity_mock.return_value
 
 
 @mock.patch(
@@ -361,7 +363,7 @@ def test_discovery_endpoint_by_device_type_wrong_override(
     """Test entity discovery with override to wrong component."""
 
     get_entity_mock = mock.MagicMock()
-    get_entity_mock.return_value = None
+    get_entity_mock.return_value = None, None
 
     device_key = f"{zha_device_light_color.ieee}-2"
     device_overrides = {device_key: {"type": "fan"}}

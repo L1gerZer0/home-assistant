@@ -217,11 +217,11 @@ class DiscoveryEndpoint:
 
         if component and component in COMPONENTS:
             channels = self.unclaimed_channels()
-            entity = ZHA_ENTITIES.get_entity(
+            entity, match = ZHA_ENTITIES.get_entity(
                 component, self._discovery.zha_device, channels
             )
             if entity is not None:
-                claimed_channels = entity.matched_rule.claim_channels(channels)
+                claimed_channels = match.claim_channels(channels)
                 self.add_entity(
                     component,
                     entity(unique_id, self._discovery.zha_device, claimed_channels),
