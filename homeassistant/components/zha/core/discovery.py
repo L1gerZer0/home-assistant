@@ -194,6 +194,18 @@ class DiscoveryEndpoint:
     @callback
     def discover_entities(self) -> None:
         """Process an endpoint on a zigpy device."""
+        self.discover_by_device_type()
+        self.discover_by_cluster_id()
+
+    @callback
+    def discover_by_cluster_id(self) -> None:
+        """Process an endpoint on a zigpy device."""
+
+        device_key = f"{self._discovery.zha_device.ieee}-{self.id}"
+
+    @callback
+    def discover_by_device_type(self) -> None:
+        """Process an endpoint on a zigpy device."""
 
         unique_id = f"{self._discovery.zha_device.ieee}-{self.id}"
 
@@ -209,11 +221,12 @@ class DiscoveryEndpoint:
                 component, self._discovery.zha_device, channels
             )
             if entity is not None:
-                claimed_channels = []
+                claimed_channels = entity.matched_rule.claim_channels(channels)
                 self.add_entity(
                     component,
                     entity(unique_id, self._discovery.zha_device, claimed_channels),
                 )
+                self.claim_channels(claimed_channels)
 
     @callback
     def claim_channels(self, channels: typing.List[zha_typing.ChannelType]) -> None:
