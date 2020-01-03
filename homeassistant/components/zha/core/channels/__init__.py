@@ -319,6 +319,11 @@ class ZDOChannel(LogMixin):
         self._cluster.add_listener(self)
 
     @property
+    def id(self) -> str:
+        """Channel ID."""
+        return self.name
+
+    @property
     def unique_id(self):
         """Return the unique id for this channel."""
         return self._unique_id
