@@ -13,22 +13,12 @@ from zigpy.zcl.clusters.general import OnOff, PowerConfiguration
 
 from homeassistant import const as ha_const
 from homeassistant.core import callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from . import typing as zha_typing
-from .channels import AttributeListeningChannel, EventRelayChannel, ZDOChannel
-from .const import COMPONENTS, CONF_DEVICE_CONFIG, DATA_ZHA, ZHA_DISCOVERY_NEW
-from .registries import (
-    CHANNEL_ONLY_CLUSTERS,
-    COMPONENT_CLUSTERS,
-    DEVICE_CLASS,
-    EVENT_RELAY_CLUSTERS,
-    OUTPUT_CHANNEL_ONLY_CLUSTERS,
-    REMOTE_DEVICE_TYPES,
-    SINGLE_INPUT_CLUSTER_DEVICE_CLASS,
-    SINGLE_OUTPUT_CLUSTER_DEVICE_CLASS,
-    ZHA_ENTITIES,
-    ZIGBEE_CHANNEL_REGISTRY,
+from . import (
+    channels as zha_channels,
+    const as zha_const,
+    registries as zha_regs,
+    typing as zha_typing,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,40 +49,11 @@ def _async_handle_single_cluster_matches(
 
 
 @callback
-def _async_handle_channel_only_cluster_match(zha_device, cluster, is_new_join):
-    """Handle a channel only cluster match."""
-    _async_create_cluster_channel(cluster, zha_device, is_new_join)
-
-
-@callback
 def _async_handle_single_cluster_match(
     hass, zha_device, cluster, device_key, device_classes, is_new_join
 ):
     """Dispatch a single cluster match to a HA component."""
-    component = None  # sub_component = None
-    for cluster_type, candidate_component in device_classes.items():
-        if isinstance(cluster_type, int):
-            if cluster.cluster_id == cluster_type:
-                component = candidate_component
-        elif isinstance(cluster, cluster_type):
-            component = candidate_component
-            break
-
-    if component is None or component not in COMPONENTS:
-        return
-    channels = []
-    _async_create_cluster_channel(cluster, zha_device, is_new_join, channels=channels)
-
-    cluster_key = f"{device_key}-{cluster.cluster_id}"
-    discovery_info = {
-        "unique_id": cluster_key,
-        "zha_device": zha_device,
-        "channels": channels,
-        "entity_suffix": f"_{cluster.cluster_id}",
-        "component": component,
-    }
-
-    return discovery_info
+    pass
 
 
 class Discovery:
@@ -163,8 +124,8 @@ class DiscoveryEndpoint:
     def add_all_channels(self) -> None:
         """Create and add channels for all input clusters."""
         for cluster_id, cluster in self.endpoint.in_clusters.items():
-            channel_class = ZIGBEE_CHANNEL_REGISTRY.get(
-                cluster_id, AttributeListeningChannel
+            channel_class = zha_regs.ZIGBEE_CHANNEL_REGISTRY.get(
+                cluster_id, zha_channels.AttributeListeningChannel
             )
             # really ugly hack to deal with xiaomi using the door lock cluster
             # incorrectly.
@@ -172,7 +133,7 @@ class DiscoveryEndpoint:
                 hasattr(cluster, "ep_attribute")
                 and cluster.ep_attribute == "multistate_input"
             ):
-                channel_class = AttributeListeningChannel
+                channel_class = zha_channels.AttributeListeningChannel
             # end of ugly hack
             ch = channel_class(cluster, self._discovery.zha_device)
             self.all_channels[ch.id] = ch
@@ -185,10 +146,10 @@ class DiscoveryEndpoint:
     @callback
     def add_relay_channels(self) -> None:
         """Create relay channels for all output clusters if in the registry."""
-        for cluster_id in EVENT_RELAY_CLUSTERS:
+        for cluster_id in zha_regs.EVENT_RELAY_CLUSTERS:
             cluster = self.endpoint.out_clusters.get(cluster_id)
             if cluster is not None:
-                ch = EventRelayChannel(cluster, self._discovery.zha_device)
+                ch = zha_channels.EventRelayChannel(cluster, self._discovery.zha_device)
                 self.relay_channels[ch.id] = ch
 
     @callback
@@ -201,7 +162,23 @@ class DiscoveryEndpoint:
     def discover_by_cluster_id(self) -> None:
         """Process an endpoint on a zigpy device."""
 
-        device_key = f"{self._discovery.zha_device.ieee}-{self.id}"
+        remaining_channels = self.unclaimed_channels()
+        for channel in remaining_channels:
+            if channel.cluster.cluster_id in zha_regs.CHANNEL_ONLY_CLUSTERS:
+                self.claim_channels([channel])
+                continue
+
+            component = zha_regs.SINGLE_INPUT_CLUSTER_DEVICE_CLASS.get(
+                channel.cluster.__class__
+            )
+            if component is None:
+                component = zha_regs.SINGLE_INPUT_CLUSTER_DEVICE_CLASS.get(
+                    channel.cluster.cluster_id
+                )
+            self.probe_single_cluster_component(component, channel)
+
+        # until we can get rid off registries
+        self.handle_on_off_output_cluster_exception()
 
     @callback
     def discover_by_device_type(self) -> None:
@@ -213,11 +190,11 @@ class DiscoveryEndpoint:
         if component is None:
             ep_profile_id = self.endpoint.profile_id
             ep_device_type = self.endpoint.device_type
-            component = DEVICE_CLASS[ep_profile_id].get(ep_device_type)
+            component = zha_regs.DEVICE_CLASS[ep_profile_id].get(ep_device_type)
 
-        if component and component in COMPONENTS:
+        if component and component in zha_const.COMPONENTS:
             channels = self.unclaimed_channels()
-            entity, match = ZHA_ENTITIES.get_entity(
+            entity, match = zha_regs.ZHA_ENTITIES.get_entity(
                 component, self._discovery.zha_device, channels
             )
             if entity is not None:
@@ -232,6 +209,47 @@ class DiscoveryEndpoint:
     def claim_channels(self, channels: typing.List[zha_typing.ChannelType]) -> None:
         """Claim a channel."""
         self.claimed_channels.update({ch.id: ch for ch in channels})
+
+    def handle_on_off_output_cluster_exception(self) -> None:
+        """Process output clusters of the endpoint."""
+
+        profile_id = self.endpoint.profile_id
+        device_type = self.endpoint.device_type
+        if device_type in zha_regs.REMOTE_DEVICE_TYPES.get(profile_id, []):
+            return
+
+        for cluster_id, cluster in self.endpoint.out_clusters.items():
+            component = zha_regs.SINGLE_OUTPUT_CLUSTER_DEVICE_CLASS.get(
+                cluster.__class__
+            )
+            if component is None:
+                continue
+
+            channel_class = zha_regs.ZIGBEE_CHANNEL_REGISTRY.get(
+                cluster_id, zha_channels.AttributeListeningChannel
+            )
+            channel = channel_class(cluster, self._discovery.zha_device)
+            self.probe_single_cluster_component(component, channel)
+
+    def probe_single_cluster_component(
+        self, component: str, channel: zha_typing.ChannelType
+    ) -> None:
+        """Add single cluster channel component if exists."""
+
+        if component and component in zha_const.COMPONENTS:
+            channel_list = [channel]
+            device_key = f"{self._discovery.zha_device.ieee}-{self.id}"
+            unique_id = f"{device_key}-{channel.cluster.cluster_id}"
+
+            entity, match = zha_regs.ZHA_ENTITIES.get_entity(
+                component, self._discovery.zha_device, channel_list
+            )
+            if entity is not None:
+                self.add_entity(
+                    component,
+                    entity(unique_id, self._discovery.zha_device, channel_list),
+                )
+                self.claim_channels(channel_list)
 
     @callback
     def unclaimed_channels(self) -> typing.List[zha_typing.ChannelType]:
