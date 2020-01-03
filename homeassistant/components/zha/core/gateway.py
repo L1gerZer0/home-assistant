@@ -29,11 +29,13 @@ from .const import (
     ATTR_TYPE,
     CONF_BAUDRATE,
     CONF_DATABASE,
+    CONF_DEVICE_CONFIG,
     CONF_RADIO_TYPE,
     CONF_USB_PATH,
     CONTROLLER,
     DATA_ZHA,
     DATA_ZHA_BRIDGE_ID,
+    DATA_ZHA_CONFIG,
     DATA_ZHA_GATEWAY,
     DEBUG_COMP_BELLOWS,
     DEBUG_COMP_ZHA,
@@ -63,7 +65,11 @@ from .const import (
     ZHA_GW_RADIO_DESCRIPTION,
 )
 from .device import DeviceStatus, ZHADevice
-from .discovery import async_dispatch_discovery_info, async_process_endpoint
+from .discovery import (
+    async_dispatch_discovery_info,
+    async_process_endpoint,
+    update_device_overrides,
+)
 from .helpers import async_get_device_info
 from .patches import apply_application_controller_patch
 from .registries import RADIO_TYPES
@@ -101,6 +107,9 @@ class ZHAGateway:
 
     async def async_initialize(self):
         """Initialize controller and connect radio."""
+        update_device_overrides(
+            self._hass.data[DATA_ZHA][DATA_ZHA_CONFIG].get(CONF_DEVICE_CONFIG)
+        )
         self.zha_storage = await async_get_registry(self._hass)
         self.ha_device_registry = await get_dev_reg(self._hass)
 
