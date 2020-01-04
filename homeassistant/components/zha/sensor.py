@@ -32,6 +32,7 @@ from .core.const import (
     CHANNEL_TEMPERATURE,
     DATA_ZHA,
     DATA_ZHA_ADD_ENTITIES,
+    DATA_ZHA_PLATFORM_LOADED,
     SIGNAL_ATTR_UPDATED,
     SIGNAL_STATE_ATTR,
 )
@@ -70,6 +71,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the Zigbee Home Automation sensor from config entry."""
 
     hass.data[DATA_ZHA][DOMAIN][DATA_ZHA_ADD_ENTITIES] = async_add_entities
+    hass.data[DATA_ZHA][DOMAIN][DATA_ZHA_PLATFORM_LOADED].set()
 
 
 class Sensor(ZhaEntity):

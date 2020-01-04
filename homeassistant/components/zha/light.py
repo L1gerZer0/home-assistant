@@ -17,6 +17,7 @@ from .core.const import (
     CHANNEL_ON_OFF,
     DATA_ZHA,
     DATA_ZHA_ADD_ENTITIES,
+    DATA_ZHA_PLATFORM_LOADED,
     SIGNAL_ATTR_UPDATED,
     SIGNAL_SET_LEVEL,
 )
@@ -49,6 +50,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the Zigbee Home Automation light from config entry."""
 
     hass.data[DATA_ZHA][light.DOMAIN][DATA_ZHA_ADD_ENTITIES] = async_add_entities
+    hass.data[DATA_ZHA][light.DOMAIN][DATA_ZHA_PLATFORM_LOADED].set()
 
 
 @STRICT_MATCH(channel_names=CHANNEL_ON_OFF, aux_channels={CHANNEL_COLOR, CHANNEL_LEVEL})

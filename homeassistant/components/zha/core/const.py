@@ -92,6 +92,7 @@ DATA_ZHA_CONFIG = "config"
 DATA_ZHA_CORE_EVENTS = "zha_core_events"
 DATA_ZHA_DISPATCHERS = "zha_dispatchers"
 DATA_ZHA_GATEWAY = "zha_gateway"
+DATA_ZHA_PLATFORM_LOADED = "platform_loaded"
 
 DEBUG_COMP_BELLOWS = "bellows"
 DEBUG_COMP_ZHA = "homeassistant.components.zha"

@@ -24,6 +24,7 @@ from .core.const import (
     CHANNEL_ZONE,
     DATA_ZHA,
     DATA_ZHA_ADD_ENTITIES,
+    DATA_ZHA_PLATFORM_LOADED,
     SIGNAL_ATTR_UPDATED,
 )
 from .core.registries import ZHA_ENTITIES
@@ -53,6 +54,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the Zigbee Home Automation binary sensor from config entry."""
 
     hass.data[DATA_ZHA][DOMAIN][DATA_ZHA_ADD_ENTITIES] = async_add_entities
+    hass.data[DATA_ZHA][DOMAIN][DATA_ZHA_PLATFORM_LOADED].set()
 
 
 class BinarySensor(ZhaEntity, BinarySensorDevice):

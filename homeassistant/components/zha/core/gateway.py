@@ -11,6 +11,7 @@ import itertools
 import logging
 import os
 import traceback
+import typing
 
 from homeassistant.components.system_log import LogEntry, _figure_out_source
 from homeassistant.core import callback
@@ -20,7 +21,7 @@ from homeassistant.helpers.device_registry import (
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from . import discovery
+from . import discovery, typing as zha_typing
 from .const import (
     ATTR_IEEE,
     ATTR_MANUFACTURER,
@@ -28,6 +29,7 @@ from .const import (
     ATTR_NWK,
     ATTR_SIGNATURE,
     ATTR_TYPE,
+    COMPONENTS,
     CONF_BAUDRATE,
     CONF_DATABASE,
     CONF_DEVICE_CONFIG,
@@ -35,9 +37,11 @@ from .const import (
     CONF_USB_PATH,
     CONTROLLER,
     DATA_ZHA,
+    DATA_ZHA_ADD_ENTITIES,
     DATA_ZHA_BRIDGE_ID,
     DATA_ZHA_CONFIG,
     DATA_ZHA_GATEWAY,
+    DATA_ZHA_PLATFORM_LOADED,
     DEBUG_COMP_BELLOWS,
     DEBUG_COMP_ZHA,
     DEBUG_COMP_ZIGPY,
@@ -146,6 +150,42 @@ class ZHAGateway:
                 init_with_semaphore(self.async_device_restored(device), semaphore)
             )
         await asyncio.gather(*init_tasks)
+
+    async def async_add_entities(
+        self,
+        entities: typing.Optional[
+            typing.Dict[str, typing.List[zha_typing.ZhaEntityType]]
+        ] = None,
+    ) -> None:
+        """Add entities from devices."""
+
+        if entities is None:
+            entities = collections.defaultdict(list)
+            for device in self.devices.values():
+                device.debug("Loading entities")
+                for component, ent_list in device.entities.items():
+                    device.debug(
+                        "Entities for '%s' component: %s",
+                        component,
+                        [ent.__class__.__name__ for ent in ent_list],
+                    )
+                    entities[component].extend(ent_list)
+
+        # ensure all platforms were loaded
+        data = self._hass.data[DATA_ZHA]
+        platforms = [data[comp][DATA_ZHA_PLATFORM_LOADED].wait() for comp in COMPONENTS]
+        await asyncio.gather(*platforms)
+
+        for component, ent_list in entities.items():
+            async_add_entities = self._hass.data[DATA_ZHA][component].get(
+                DATA_ZHA_ADD_ENTITIES
+            )
+            if async_add_entities is None:
+                _LOGGER.warning(
+                    "No 'async_add_entities' handler for '%s' component", component
+                )
+                continue
+            async_add_entities(ent_list, update_before_add=True)
 
     def device_joined(self, device):
         """Handle device joined.
@@ -381,6 +421,7 @@ class ZHAGateway:
 
     async def _async_device_joined(self, zha_device):
         await zha_device.async_configure()
+        await self.async_add_entities(zha_device.entities)
         # will cause async_init to fire so don't explicitly call it
         zha_device.update_available(True)
 
