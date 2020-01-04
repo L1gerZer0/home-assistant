@@ -10,6 +10,7 @@ from enum import Enum
 import itertools
 import logging
 import time
+import typing
 
 from zigpy import types
 import zigpy.exceptions
@@ -105,6 +106,11 @@ class ZHADevice(LogMixin):
     def device(self) -> zha_typing.ZigpyDeviceType:
         """Return underlying Zigpy device."""
         return self._zigpy_device
+
+    @property
+    def entities(self) -> typing.Dict[str, typing.List[zha_typing.ZhaEntityType]]:
+        """Return a dict of component: entities_list."""
+        return self._discovery.entities
 
     @property
     def name(self):
