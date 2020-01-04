@@ -20,6 +20,7 @@ from homeassistant.helpers.device_registry import (
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
+from . import discovery
 from .const import (
     ATTR_IEEE,
     ATTR_MANUFACTURER,
@@ -65,11 +66,6 @@ from .const import (
     ZHA_GW_RADIO_DESCRIPTION,
 )
 from .device import DeviceStatus, ZHADevice
-from .discovery import (
-    async_dispatch_discovery_info,
-    async_process_endpoint,
-    update_device_overrides,
-)
 from .helpers import async_get_device_info
 from .patches import apply_application_controller_patch
 from .registries import RADIO_TYPES
@@ -107,9 +103,9 @@ class ZHAGateway:
 
     async def async_initialize(self):
         """Initialize controller and connect radio."""
-        update_device_overrides(
-            self._hass.data[DATA_ZHA][DATA_ZHA_CONFIG].get(CONF_DEVICE_CONFIG)
-        )
+        zha_config = self._hass.data[DATA_ZHA].get(DATA_ZHA_CONFIG)
+        if zha_config is not None:
+            discovery.update_device_overrides(zha_config.get(CONF_DEVICE_CONFIG))
         self.zha_storage = await async_get_registry(self._hass)
         self.ha_device_registry = await get_dev_reg(self._hass)
 
@@ -369,7 +365,7 @@ class ZHAGateway:
                 "device - %s has joined the ZHA zigbee network",
                 f"0x{device.nwk:04x}:{device.ieee}",
             )
-            await self._async_device_joined(device, zha_device)
+            await self._async_device_joined(zha_device)
 
         device_info = async_get_device_info(
             self._hass, zha_device, self.ha_device_registry
@@ -383,43 +379,15 @@ class ZHAGateway:
             },
         )
 
-    async def _async_device_joined(self, device, zha_device):
-        discovery_infos = []
-        for endpoint_id, endpoint in device.endpoints.items():
-            async_process_endpoint(
-                self._hass,
-                self._config,
-                endpoint_id,
-                endpoint,
-                discovery_infos,
-                device,
-                zha_device,
-                True,
-            )
-
+    async def _async_device_joined(self, zha_device):
         await zha_device.async_configure()
         # will cause async_init to fire so don't explicitly call it
         zha_device.update_available(True)
-
-        for discovery_info in discovery_infos:
-            async_dispatch_discovery_info(self._hass, True, discovery_info)
 
     # only public for testing
     async def async_device_restored(self, device):
         """Add an existing device to the ZHA zigbee network when ZHA first starts."""
         zha_device = self._async_get_or_create_device(device)
-        discovery_infos = []
-        for endpoint_id, endpoint in device.endpoints.items():
-            async_process_endpoint(
-                self._hass,
-                self._config,
-                endpoint_id,
-                endpoint,
-                discovery_infos,
-                device,
-                zha_device,
-                False,
-            )
 
         if zha_device.is_mains_powered:
             # the device isn't a battery powered device so we should be able
@@ -433,9 +401,6 @@ class ZHAGateway:
             await zha_device.async_initialize(from_cache=False)
         else:
             await zha_device.async_initialize(from_cache=True)
-
-        for discovery_info in discovery_infos:
-            async_dispatch_discovery_info(self._hass, False, discovery_info)
 
     async def _async_device_rejoined(self, zha_device):
         _LOGGER.debug(
