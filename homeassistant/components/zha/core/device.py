@@ -7,6 +7,7 @@ https://home-assistant.io/integrations/zha/
 import asyncio
 from datetime import timedelta
 from enum import Enum
+import itertools
 import logging
 import time
 
@@ -24,8 +25,7 @@ from homeassistant.helpers.dispatcher import (
 )
 from homeassistant.helpers.event import async_track_time_interval
 
-from . import typing as zha_typing
-from .channels import EventRelayChannel
+from . import discovery as zha_discovery, typing as zha_typing
 from .const import (
     ATTR_ARGS,
     ATTR_ATTRIBUTE,
@@ -48,8 +48,6 @@ from .const import (
     ATTR_RSSI,
     ATTR_VALUE,
     CHANNEL_BASIC,
-    CHANNEL_POWER_CONFIGURATION,
-    CHANNEL_ZDO,
     CLUSTER_COMMAND_SERVER,
     CLUSTER_COMMANDS_CLIENT,
     CLUSTER_COMMANDS_SERVER,
@@ -84,14 +82,12 @@ class ZHADevice(LogMixin):
         self.hass = hass
         self._zigpy_device = zigpy_device
         self._zha_gateway = zha_gateway
-        self.cluster_channels = {}
-        self._relay_channels = {}
-        self._all_channels = []
         self._available = False
         self._available_signal = "{}_{}_{}".format(
             self.name, self.ieee, SIGNAL_AVAILABLE
         )
         self._checkins_missed_count = 2
+        self._discovery = zha_discovery.Discovery.new(self)
         self._unsub = async_dispatcher_connect(
             self.hass, self._available_signal, self.async_initialize
         )
@@ -205,11 +201,6 @@ class ZHADevice(LogMixin):
         return self._zha_gateway
 
     @property
-    def all_channels(self):
-        """Return cluster channels and relay channels for device."""
-        return self._all_channels
-
-    @property
     def device_automation_triggers(self):
         """Return the device automation triggers for this device."""
         if hasattr(self._zigpy_device, "device_automation_triggers"):
@@ -238,19 +229,21 @@ class ZHADevice(LogMixin):
             if difference > _KEEP_ALIVE_INTERVAL:
                 if self._checkins_missed_count < _CHECKIN_GRACE_PERIODS:
                     self._checkins_missed_count += 1
-                    if (
-                        CHANNEL_BASIC in self.cluster_channels
-                        and self.manufacturer != "LUMI"
-                    ):
-                        self.debug(
-                            "Attempting to checkin with device - missed checkins: %s",
-                            self._checkins_missed_count,
-                        )
-                        self.hass.async_create_task(
-                            self.cluster_channels[CHANNEL_BASIC].get_attribute_value(
-                                ATTR_MANUFACTURER, from_cache=False
-                            )
-                        )
+                    if self.manufacturer == "LUMI":
+                        return
+                    ch = None
+                    for ch in self._discovery.claimed_channels.values():
+                        if ch.name == CHANNEL_BASIC:
+                            break
+                    if ch is None:
+                        return
+                    self.debug(
+                        "Attempting to checkin with device - missed checkins: %s",
+                        self._checkins_missed_count,
+                    )
+                    self.hass.async_create_task(
+                        ch.get_attribute_value(ATTR_MANUFACTURER, from_cache=False)
+                    )
                 else:
                     self.update_available(False)
             else:
@@ -289,66 +282,14 @@ class ZHADevice(LogMixin):
             ATTR_AVAILABLE: self.available,
         }
 
-    def add_cluster_channel(self, cluster_channel):
-        """Add cluster channel to device."""
-        # only keep 1 power configuration channel
-        if (
-            cluster_channel.name is CHANNEL_POWER_CONFIGURATION
-            and CHANNEL_POWER_CONFIGURATION in self.cluster_channels
-        ):
-            return
-
-        if isinstance(cluster_channel, EventRelayChannel):
-            self._relay_channels[cluster_channel.unique_id] = cluster_channel
-            self._all_channels.append(cluster_channel)
-        else:
-            self.cluster_channels[cluster_channel.name] = cluster_channel
-            self._all_channels.append(cluster_channel)
-
-    def get_channels_to_configure(self):
-        """Get a deduped list of channels for configuration.
-
-        This goes through all channels and gets a unique list of channels to
-        configure. It first assembles a unique list of channels that are part
-        of entities while stashing relay channels off to the side. It then
-        takse the stashed relay channels and adds them to the list of channels
-        that will be returned if there isn't a channel in the list for that
-        cluster already. This is done to ensure each cluster is only configured
-        once.
-        """
-        channel_keys = []
-        channels = []
-        relay_channels = self._relay_channels.values()
-
-        def get_key(channel):
-            channel_key = "ZDO"
-            if hasattr(channel.cluster, "cluster_id"):
-                channel_key = "{}_{}".format(
-                    channel.cluster.endpoint.endpoint_id, channel.cluster.cluster_id
-                )
-            return channel_key
-
-        # first we get all unique non event channels
-        for channel in self.all_channels:
-            c_key = get_key(channel)
-            if c_key not in channel_keys and channel not in relay_channels:
-                channel_keys.append(c_key)
-                channels.append(channel)
-
-        # now we get event channels that still need their cluster configured
-        for channel in relay_channels:
-            channel_key = get_key(channel)
-            if channel_key not in channel_keys:
-                channel_keys.append(channel_key)
-                channels.append(channel)
-        return channels
-
     async def async_configure(self):
         """Configure the device."""
         self.debug("started configuration")
-        await self._execute_channel_tasks(
-            self.get_channels_to_configure(), "async_configure"
+        channels = itertools.chain(
+            self._discovery.claimed_channels.values(),
+            self._discovery.relay_channels.values(),
         )
+        await self._execute_channel_tasks(channels, "async_configure")
         self.debug("completed configuration")
         entry = self.gateway.zha_storage.async_create_or_update(self)
         self.debug("stored in registry: %s", entry)
@@ -356,9 +297,11 @@ class ZHADevice(LogMixin):
     async def async_initialize(self, from_cache=False):
         """Initialize channels."""
         self.debug("started initialization")
-        await self._execute_channel_tasks(
-            self.all_channels, "async_initialize", from_cache
+        channels = itertools.chain(
+            self._discovery.claimed_channels.values(),
+            self._discovery.relay_channels.values(),
         )
+        await self._execute_channel_tasks(channels, "async_initialize", from_cache)
         self.debug("power source: %s", self.power_source)
         self.status = DeviceStatus.INITIALIZED
         self.debug("completed initialization")
@@ -367,19 +310,10 @@ class ZHADevice(LogMixin):
         """Gather and execute a set of CHANNEL tasks."""
         channel_tasks = []
         semaphore = asyncio.Semaphore(3)
-        zdo_task = None
         for channel in channels:
-            if channel.name == CHANNEL_ZDO:
-                if zdo_task is None:  # We only want to do this once
-                    zdo_task = self._async_create_task(
-                        semaphore, channel, task_name, *args
-                    )
-            else:
-                channel_tasks.append(
-                    self._async_create_task(semaphore, channel, task_name, *args)
-                )
-        if zdo_task is not None:
-            await zdo_task
+            channel_tasks.append(
+                self._async_create_task(semaphore, channel, task_name, *args)
+            )
         await asyncio.gather(*channel_tasks)
 
     async def _async_create_task(self, semaphore, channel, func_name, *args):

@@ -32,29 +32,6 @@ def update_device_overrides(config: typing.Optional[typing.Dict] = None) -> None
     DEVICE_CONFIGS.update(config)
 
 
-def async_dispatch_discovery_info(*args, **kwargs):
-    pass
-
-
-def async_process_endpoint(*args, **kwargs):
-    pass
-
-
-@callback
-def _async_handle_single_cluster_matches(
-    hass, endpoint, zha_device, profile_clusters, device_key, is_new_join
-):
-    pass
-
-
-@callback
-def _async_handle_single_cluster_match(
-    hass, zha_device, cluster, device_key, device_classes, is_new_join
-):
-    """Dispatch a single cluster match to a HA component."""
-    pass
-
-
 class Discovery:
     """All discovered channels and entities of a device."""
 
