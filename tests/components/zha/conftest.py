@@ -2,17 +2,19 @@
 from unittest import mock
 from unittest.mock import patch
 
+import asynctest
 import pytest
 import zigpy
 from zigpy.application import ControllerApplication
 
 from homeassistant import config_entries
 from homeassistant.components.zha.core.const import COMPONENTS, DATA_ZHA, DOMAIN
+import homeassistant.components.zha.core.device as zha_core_device
 from homeassistant.components.zha.core.gateway import ZHAGateway
 from homeassistant.components.zha.core.store import async_get_registry
 from homeassistant.helpers.device_registry import async_get_registry as get_dev_reg
 
-from .common import async_setup_entry
+from .common import async_setup_entry, make_device
 
 FIXTURE_GRP_ID = 0x1001
 FIXTURE_GRP_NAME = "fixture group"
@@ -81,6 +83,38 @@ def channel():
         ch.name = name
         ch.generic_id = f"channel_0x{cluster_id:04x}"
         ch.id = f"{endpoint_id}:0x{cluster_id:04x}"
+        ch.async_configure = asynctest.CoroutineMock()
+        ch.async_initialize = asynctest.CoroutineMock()
         return ch
 
     return channel
+
+
+@pytest.fixture
+def zha_device(hass, zha_gateway):
+    """Return a zha Device factory."""
+
+    def _zha_device(
+        endpoints=None,
+        ieee="00:11:22:33:44:55:66:77",
+        manufacturer="mock manufacturer",
+        model="mock model",
+    ):
+        if endpoints is None:
+            endpoints = {
+                1: {
+                    "in_clusters": [0, 1, 8, 768],
+                    "out_clusters": [0x19],
+                    "device_type": 0x0105,
+                },
+                2: {
+                    "in_clusters": [0],
+                    "out_clusters": [6, 8, 0x19, 768],
+                    "device_type": 0x0810,
+                },
+            }
+        zigpy_device = make_device(endpoints, ieee, manufacturer, model)
+        zha_device = zha_core_device.ZHADevice(hass, zigpy_device, zha_gateway)
+        return zha_device
+
+    return _zha_device

@@ -7,7 +7,6 @@ import pytest
 
 import homeassistant.components.zha.core.channels as zha_channels
 import homeassistant.components.zha.core.const as zha_const
-import homeassistant.components.zha.core.device as zha_core_device
 import homeassistant.components.zha.core.discovery as disc
 import homeassistant.components.zha.core.gateway as core_zha_gw
 import homeassistant.components.zha.core.registries as zha_regs
@@ -17,36 +16,6 @@ import homeassistant.components.zha.sensor as zha_sensor
 
 from .common import make_device
 from .zha_devices_list import DEVICES
-
-
-@pytest.fixture
-def zha_device(hass, zha_gateway):
-    """Returns a zha Device factory."""
-
-    def _zha_device(
-        endpoints=None,
-        ieee="00:11:22:33:44:55:66:77",
-        manufacturer="mock manufacturer",
-        model="mock model",
-    ):
-        if endpoints is None:
-            endpoints = {
-                1: {
-                    "in_clusters": [0, 1, 8, 768],
-                    "out_clusters": [0x19],
-                    "device_type": 0x0105,
-                },
-                2: {
-                    "in_clusters": [0],
-                    "out_clusters": [6, 8, 0x19, 768],
-                    "device_type": 0x0810,
-                },
-            }
-        zigpy_device = make_device(endpoints, ieee, manufacturer, model)
-        zha_device = zha_core_device.ZHADevice(hass, zigpy_device, zha_gateway)
-        return zha_device
-
-    return _zha_device
 
 
 @pytest.fixture
@@ -176,7 +145,7 @@ def test_discovery_endpoint_new(m1, m2, m3, zha_device):
 
 
 def test_discovery_endpoint_add_relay_channels(zha_device):
-    """Test adding of relay channels"""
+    """Test adding of relay channels."""
     zha_dev = zha_device()
     discovery = disc.Discovery(zha_dev)
     disc_ep = disc.DiscoveryEndpoint(discovery, 2)
