@@ -9,8 +9,6 @@ import collections
 import logging
 import typing
 
-from zigpy.zcl.clusters.general import OnOff, PowerConfiguration
-
 from homeassistant import const as ha_const
 from homeassistant.core import callback
 
@@ -20,6 +18,7 @@ from . import (
     registries as zha_regs,
     typing as zha_typing,
 )
+from .. import sensor as zha_sensors
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,12 +60,100 @@ class Discovery:
 
     def __init__(self, zha_device: zha_typing.ZhaDeviceType) -> None:
         """Initialize instance."""
+        self._endpoints = {}
+        self._got_power_config = None
+        self._got_power_entity = None
+        self._zdo_channel = zha_channels.ZDOChannel(
+            zha_device.device.endpoints[0], zha_device
+        )
         self._zha_device = zha_device
+
+    @property
+    def claimed_channels(self) -> typing.Dict[str, zha_typing.ChannelType]:
+        """Return all claimed channels."""
+        channels = {
+            ch_id: ch
+            for ep_id in sorted(self.endpoints)
+            for ch_id, ch in self.endpoints[ep_id].claimed_channels.items()
+            if self._filter_pwr_ch(ch)
+        }
+        channels.update({self.zdo_channel.id: self.zdo_channel})
+        return channels
+
+    @property
+    def endpoints(self) -> typing.Dict[int, "DiscoveryEndpoint"]:
+        """Return discover endpoints dict."""
+        return self._endpoints
+
+    @property
+    def entities(self) -> typing.Dict[str, typing.List[zha_typing.ZhaEntityType]]:
+        """Return discovered entities."""
+        result = collections.defaultdict(list)
+        for ep_id in sorted(self.endpoints):
+            for component, entities in self.endpoints[ep_id].entities.items():
+                result[component].extend(self._filter_pwr_ent(entities))
+        return result
+
+    @classmethod
+    def new(cls, zha_device: zha_typing.ZhaDeviceType) -> "Discovery":
+        """Create new instance."""
+        discovery = cls(zha_device)
+        discovery._endpoints = {
+            ep_id: DiscoveryEndpoint.new(discovery, ep_id)
+            for ep_id in sorted(zha_device.device.endpoints)
+            if ep_id
+        }
+        return discovery
+
+    @property
+    def relay_channels(self) -> typing.Dict[str, zha_typing.EventRelayChannelType]:
+        """All relay channels."""
+        return {
+            ch_id: ch
+            for ep in self.endpoints.values()
+            for ch_id, ch in ep.relay_channels.items()
+        }
+
+    @property
+    def zdo_channel(self) -> zha_typing.ZDOChannelType:
+        """Return ZDO channel."""
+        return self._zdo_channel
 
     @property
     def zha_device(self) -> zha_typing.ZhaDeviceType:
         """Return parent zha device."""
         return self._zha_device
+
+    def add_endpoint(self, ep_id: int) -> "DiscoveryEndpoint":
+        """Add new endpoint."""
+        if ep_id in self.endpoints:
+            return self.endpoints[ep_id]
+
+    def _filter_pwr_ch(self, channel: zha_typing.ChannelType) -> bool:
+        """Filter duplicate power configuration channels."""
+        if channel.name != zha_const.CHANNEL_POWER_CONFIGURATION:
+            return True
+        if self._got_power_config:
+            return False if channel != self._got_power_config else True
+
+        self._got_power_config = channel
+        return True
+
+    def _filter_pwr_ent(
+        self, entities: typing.List[zha_typing.ZhaEntityType]
+    ) -> typing.List[zha_typing.ZhaEntityType]:
+        """Filter duplicate battery sensors."""
+        return [ent for ent in entities if self._filter_pwr_ent_list(ent)]
+
+    def _filter_pwr_ent_list(self, entity: zha_typing.ZhaEntityType) -> bool:
+        """Returrn True for entities to keep."""
+        if not isinstance(entity, zha_sensors.Battery):
+            return True
+        if self._got_power_entity:
+            return False if entity != self._got_power_entity else True
+
+        self._got_power_entity = entity
+        return True
 
 
 class DiscoveryEndpoint:
