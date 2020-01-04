@@ -5,12 +5,15 @@ from unittest import mock
 
 import pytest
 
-from homeassistant.components.zha.core.channels import EventRelayChannel
+import homeassistant.components.zha.core.channels as zha_channels
 import homeassistant.components.zha.core.const as zha_const
 import homeassistant.components.zha.core.device as zha_core_device
 import homeassistant.components.zha.core.discovery as disc
 import homeassistant.components.zha.core.gateway as core_zha_gw
 import homeassistant.components.zha.core.registries as zha_regs
+import homeassistant.components.zha.light as zha_light
+import homeassistant.components.zha.lock as zha_lock  # noqa: F401 pylint: disable=unused-imoort
+import homeassistant.components.zha.sensor as zha_sensor
 
 from .common import make_device
 from .zha_devices_list import DEVICES
@@ -29,7 +32,7 @@ def zha_device(hass, zha_gateway):
         if endpoints is None:
             endpoints = {
                 1: {
-                    "in_clusters": [0, 1, 6, 8, 768],
+                    "in_clusters": [0, 1, 8, 768],
                     "out_clusters": [0x19],
                     "device_type": 0x0105,
                 },
@@ -109,7 +112,7 @@ async def test_devices(device, zha_gateway: core_zha_gw.ZHAGateway, hass, config
         event_channels = {
             arg[0].cluster_id
             for arg, kwarg in cr_ch.call_args_list
-            if kwarg.get("channel_class") == EventRelayChannel
+            if kwarg.get("channel_class") == zha_channels.EventRelayChannel
         }
 
         assert zha_entities == set(device["entities"])
@@ -499,3 +502,111 @@ def test_discovery_endpoint_out_clusters(
     else:
         assert not disc_ep.claimed_channels
         assert not disc_ep.entities[component]
+
+
+@pytest.fixture
+def discovery_endpoint_ch():
+    """Discovery endpoint fixture for channel/entity dedup."""
+
+    def _disc_ep(channels, ep_id):
+        disc_ep_mock = mock.MagicMock(spec=disc.DiscoveryEndpoint)
+        disc_ep_mock.all_channels = {ch.id: ch for ch in channels}
+        disc_ep_mock.claimed_channels = {ch.id: ch for ch in channels}
+        disc_ep_mock.entities = {
+            zha_const.SENSOR: [
+                mock.MagicMock(spec=zha_sensor.Battery)
+                if ch.name == zha_const.CHANNEL_POWER_CONFIGURATION
+                else mock.MagicMock(spec=zha_sensor.Sensor)
+                for ch in channels
+            ]
+        }
+        return disc_ep_mock
+
+    return _disc_ep
+
+
+def test_discovery_dedup(channel, discovery_endpoint_ch):
+    """Test Discovery class PowerConfiguration channel deduplication."""
+
+    ch_1_1 = channel(zha_const.CHANNEL_POWER_CONFIGURATION, 1, endpoint_id=1)
+    ch_1_6 = channel(zha_const.CHANNEL_ON_OFF, 6, endpoint_id=1)
+    ch_1_8 = channel(zha_const.CHANNEL_LEVEL, 8, endpoint_id=1)
+    ch_2_1 = channel(zha_const.CHANNEL_POWER_CONFIGURATION, 1, endpoint_id=2)
+    ch_2_6 = channel(zha_const.CHANNEL_ON_OFF, 6, endpoint_id=2)
+    ch_2_8 = channel(zha_const.CHANNEL_LEVEL, 8, endpoint_id=2)
+    ch_3_1 = channel(zha_const.CHANNEL_POWER_CONFIGURATION, 1, endpoint_id=3)
+    ch_3_8 = channel(zha_const.CHANNEL_LEVEL, 8, endpoint_id=3)
+
+    disc_ep_1 = discovery_endpoint_ch([ch_1_1, ch_1_6, ch_1_8], ep_id=1)
+    disc_ep_2 = discovery_endpoint_ch([ch_2_1, ch_2_6, ch_2_8], ep_id=2)
+    disc_ep_3 = discovery_endpoint_ch([ch_3_1, ch_3_8], ep_id=3)
+    with mock.patch(
+        "homeassistant.components.zha.core.channels.ZDOChannel"
+    ) as zdo_mock:
+        zdo_mock.return_value.id = zha_const.CHANNEL_ZDO
+        discovery = disc.Discovery(mock.MagicMock())
+    discovery._endpoints = {1: disc_ep_1, 2: disc_ep_2, 3: disc_ep_3}
+
+    # we should have only one POWER_CONFIGURATION channel
+    channels = discovery.claimed_channels
+    assert len(channels) == 7
+    assert zha_const.CHANNEL_ZDO in channels
+    assert ch_1_1.id in channels
+    assert ch_1_6.id in channels
+    assert ch_1_8.id in channels
+    assert ch_2_6.id in channels
+    assert ch_2_8.id in channels
+    assert ch_3_8.id in channels
+
+    # we should have only one Battery sensor entity
+    entities = discovery.entities[zha_const.SENSOR]
+    assert len(entities) == 6
+    assert len([ent for ent in entities if isinstance(ent, zha_sensor.Battery)]) == 1
+
+
+@mock.patch("homeassistant.components.zha.light.Light", spec=zha_light.Light)
+@mock.patch("homeassistant.components.zha.sensor.Sensor", spec=zha_sensor.Sensor)
+def test_discovery_new(m1, m2, zha_device):
+    """Test new class method."""
+    ep_1 = {
+        "device_type": 1,
+        "in_clusters": [1, 6, 8, 768, 0x101],
+        "out_clusters": [0x19],
+        "profile_id": 260,
+    }
+    ep_2 = {
+        "in_clusters": [1, 6, 8],
+        "out_clusters": [0x19, 768],
+        "device_type": 0x0102,
+        "profile_id": 260,
+    }
+    ep_3 = {
+        "in_clusters": [],
+        "out_clusters": [6, 8, 768],
+        "device_type": 0x0002,
+        "profile_id": 260,
+    }
+    device = zha_device({1: ep_1, 2: ep_2, 3: ep_3})
+
+    discovery = disc.Discovery.new(device)
+
+    assert discovery.relay_channels
+    assert len(discovery.relay_channels) == 4
+    assert "2:0x0300" in discovery.relay_channels
+    assert "3:0x0006" in discovery.relay_channels
+    assert "3:0x0008" in discovery.relay_channels
+    assert "3:0x0300" in discovery.relay_channels
+
+    assert len(discovery.claimed_channels) == 5
+    assert zha_const.CHANNEL_ZDO in discovery.claimed_channels
+    assert "1:0x0001" in discovery.claimed_channels
+    assert "2:0x0006" in discovery.claimed_channels
+    assert "2:0x0008" in discovery.claimed_channels
+
+    assert len(discovery.entities) == 3
+    assert zha_const.SENSOR in discovery.entities
+    assert zha_const.LIGHT in discovery.entities
+    assert zha_const.LOCK in discovery.entities
+    assert len(discovery.entities[zha_const.LIGHT]) == 1
+    assert len(discovery.entities[zha_const.LOCK]) == 1
+    assert len(discovery.entities[zha_const.SENSOR]) == 1
