@@ -38,9 +38,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 class Switch(ZhaEntity, SwitchDevice):
     """ZHA switch."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, unique_id, zha_device, channels, **kwargs):
         """Initialize the ZHA switch."""
-        super().__init__(**kwargs)
+        super().__init__(unique_id, zha_device, channels, **kwargs)
         self._on_off_channel = self.cluster_channels.get(CHANNEL_ON_OFF)
 
     @property
