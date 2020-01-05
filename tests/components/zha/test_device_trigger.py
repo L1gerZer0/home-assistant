@@ -4,7 +4,6 @@ import zigpy.zcl.clusters.general as general
 
 import homeassistant.components.automation as automation
 from homeassistant.components.switch import DOMAIN
-from homeassistant.components.zha.core.const import CHANNEL_ON_OFF
 from homeassistant.helpers.device_registry import async_get_registry
 from homeassistant.setup import async_setup_component
 
@@ -45,6 +44,8 @@ def calls(hass):
 async def test_triggers(hass, config_entry, zha_gateway):
     """Test zha device triggers."""
 
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass, [general.Basic.cluster_id], [general.OnOff.cluster_id], None, zha_gateway
@@ -58,7 +59,6 @@ async def test_triggers(hass, config_entry, zha_gateway):
         (LONG_RELEASE, LONG_RELEASE): {COMMAND: COMMAND_HOLD},
     }
 
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
     hass.config_entries._entries.append(config_entry)
 
@@ -135,6 +135,8 @@ async def test_no_triggers(hass, config_entry, zha_gateway):
 async def test_if_fires_on_event(hass, config_entry, zha_gateway, calls):
     """Test for remote triggers firing."""
 
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass, [general.Basic.cluster_id], [general.OnOff.cluster_id], None, zha_gateway
@@ -148,7 +150,6 @@ async def test_if_fires_on_event(hass, config_entry, zha_gateway, calls):
         (LONG_RELEASE, LONG_RELEASE): {COMMAND: COMMAND_HOLD},
     }
 
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
     hass.config_entries._entries.append(config_entry)
 
@@ -185,7 +186,7 @@ async def test_if_fires_on_event(hass, config_entry, zha_gateway, calls):
 
     await hass.async_block_till_done()
 
-    on_off_channel = zha_device.cluster_channels[CHANNEL_ON_OFF]
+    on_off_channel = zha_device._discovery.relay_channels["1:0x0006"]
     on_off_channel.zha_send_event(on_off_channel.cluster, COMMAND_SINGLE, [])
     await hass.async_block_till_done()
 
@@ -196,12 +197,13 @@ async def test_if_fires_on_event(hass, config_entry, zha_gateway, calls):
 async def test_exception_no_triggers(hass, config_entry, zha_gateway, calls, caplog):
     """Test for exception on event triggers firing."""
 
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass, [general.Basic.cluster_id], [general.OnOff.cluster_id], None, zha_gateway
     )
 
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
     hass.config_entries._entries.append(config_entry)
 
@@ -242,6 +244,8 @@ async def test_exception_no_triggers(hass, config_entry, zha_gateway, calls, cap
 async def test_exception_bad_trigger(hass, config_entry, zha_gateway, calls, caplog):
     """Test for exception on event triggers firing."""
 
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass, [general.Basic.cluster_id], [general.OnOff.cluster_id], None, zha_gateway
@@ -255,7 +259,6 @@ async def test_exception_bad_trigger(hass, config_entry, zha_gateway, calls, cap
         (LONG_RELEASE, LONG_RELEASE): {COMMAND: COMMAND_HOLD},
     }
 
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
     hass.config_entries._entries.append(config_entry)
 

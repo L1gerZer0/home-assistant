@@ -115,6 +115,9 @@ async def async_build_devices(hass, zha_gateway, config_entry, cluster_ids):
     the entity id, zigpy device, and the zigbee cluster for the sensor.
     """
 
+    # load up sensor domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     device_infos = {}
     counter = 0
     for cluster_id in cluster_ids:
@@ -132,9 +135,6 @@ async def async_build_devices(hass, zha_gateway, config_entry, cluster_ids):
         )
 
         counter += 1
-
-    # load up sensor domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     # put the other relevant info in the device info dict

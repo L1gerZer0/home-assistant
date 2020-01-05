@@ -31,13 +31,13 @@ from tests.common import mock_coro
 async def test_fan(hass, config_entry, zha_gateway):
     """Test zha fan platform."""
 
+    # load up fan domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass, [hvac.Fan.cluster_id, general.Basic.cluster_id], [], None, zha_gateway
     )
-
-    # load up fan domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     cluster = zigpy_device.endpoints.get(1).fan

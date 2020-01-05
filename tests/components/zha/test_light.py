@@ -28,6 +28,9 @@ OFF = 0
 async def test_light(hass, config_entry, zha_gateway, monkeypatch):
     """Test zha light platform."""
 
+    # load up light domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy devices
     zigpy_device_on_off = await async_init_zigpy_device(
         hass,
@@ -52,9 +55,6 @@ async def test_light(hass, config_entry, zha_gateway, monkeypatch):
         manufacturer="FakeLevelManufacturer",
         model="FakeLevelModel",
     )
-
-    # load up light domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     # on off light

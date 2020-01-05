@@ -27,6 +27,9 @@ from tests.common import async_fire_time_changed
 async def test_device_tracker(hass, config_entry, zha_gateway):
     """Test zha device tracker platform."""
 
+    # load up device tracker domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass,
@@ -41,9 +44,6 @@ async def test_device_tracker(hass, config_entry, zha_gateway):
         SMARTTHINGS_ARRIVAL_SENSOR_DEVICE_TYPE,
         zha_gateway,
     )
-
-    # load up device tracker domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     cluster = zigpy_device.endpoints.get(1).power

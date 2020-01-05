@@ -20,6 +20,9 @@ from .common import (
 async def test_binary_sensor(hass, config_entry, zha_gateway):
     """Test zha binary_sensor platform."""
 
+    # load up binary_sensor domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy devices
     zigpy_device_zone = await async_init_zigpy_device(
         hass,
@@ -40,9 +43,6 @@ async def test_binary_sensor(hass, config_entry, zha_gateway):
         manufacturer="FakeOccupancy",
         model="FakeOccupancyModel",
     )
-
-    # load up binary_sensor domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     # on off binary_sensor

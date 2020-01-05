@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 
+import homeassistant.components.zha.binary_sensor as zha_binary  # noqa: F401 pylint: disable=unused-imoort
 import homeassistant.components.zha.core.channels as zha_channels
 import homeassistant.components.zha.core.const as zha_const
 import homeassistant.components.zha.core.discovery as disc
@@ -13,6 +14,7 @@ import homeassistant.components.zha.core.registries as zha_regs
 import homeassistant.components.zha.light as zha_light
 import homeassistant.components.zha.lock as zha_lock  # noqa: F401 pylint: disable=unused-imoort
 import homeassistant.components.zha.sensor as zha_sensor
+import homeassistant.components.zha.switch as zha_switch  # noqa: F401 pylint: disable=unused-imoort
 
 from .common import make_device
 from .zha_devices_list import DEVICES
@@ -566,16 +568,24 @@ def test_discovery_new(m1, m2, zha_device):
     assert "3:0x0008" in discovery.relay_channels
     assert "3:0x0300" in discovery.relay_channels
 
-    assert len(discovery.claimed_channels) == 5
+    assert len(discovery.claimed_channels) == 7
     assert zha_const.CHANNEL_ZDO in discovery.claimed_channels
     assert "1:0x0001" in discovery.claimed_channels
+    assert "1:0x0006" in discovery.claimed_channels
+    assert "1:0x0101" in discovery.claimed_channels
     assert "2:0x0006" in discovery.claimed_channels
     assert "2:0x0008" in discovery.claimed_channels
+    assert "3:0x0006" in discovery.claimed_channels
 
-    assert len(discovery.entities) == 3
+    assert len(discovery.entities) == 5
+    assert zha_const.BINARY_SENSOR in discovery.entities
+    assert zha_const.SENSOR in discovery.entities
     assert zha_const.SENSOR in discovery.entities
     assert zha_const.LIGHT in discovery.entities
     assert zha_const.LOCK in discovery.entities
+    assert zha_const.SWITCH in discovery.entities
+    assert len(discovery.entities[zha_const.BINARY_SENSOR]) == 1
     assert len(discovery.entities[zha_const.LIGHT]) == 1
     assert len(discovery.entities[zha_const.LOCK]) == 1
     assert len(discovery.entities[zha_const.SENSOR]) == 1
+    assert len(discovery.entities[zha_const.SWITCH]) == 1

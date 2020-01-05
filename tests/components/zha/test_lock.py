@@ -25,6 +25,9 @@ UNLOCK_DOOR = 1
 async def test_lock(hass, config_entry, zha_gateway):
     """Test zha lock platform."""
 
+    # load up lock domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass,
@@ -33,9 +36,6 @@ async def test_lock(hass, config_entry, zha_gateway):
         None,
         zha_gateway,
     )
-
-    # load up lock domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     cluster = zigpy_device.endpoints.get(1).door_lock

@@ -11,7 +11,7 @@ from homeassistant.components.device_automation import (
     _async_get_device_automations as async_get_device_automations,
 )
 from homeassistant.components.zha import DOMAIN
-from homeassistant.components.zha.core.const import CHANNEL_ON_OFF
+import homeassistant.components.zha.binary_sensor as zha_binary
 from homeassistant.helpers.device_registry import async_get_registry
 from homeassistant.setup import async_setup_component
 
@@ -33,6 +33,8 @@ def calls(hass):
 async def test_get_actions(hass, config_entry, zha_gateway):
     """Test we get the expected actions from a zha device."""
 
+    await hass.config_entries.async_forward_entry_setup(config_entry, zha_binary.DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass,
@@ -46,7 +48,6 @@ async def test_get_actions(hass, config_entry, zha_gateway):
         zha_gateway,
     )
 
-    await hass.config_entries.async_forward_entry_setup(config_entry, "binary_sensor")
     await hass.async_block_till_done()
     hass.config_entries._entries.append(config_entry)
 
@@ -129,7 +130,7 @@ async def test_action(hass, config_entry, zha_gateway, calls):
 
         await hass.async_block_till_done()
 
-        on_off_channel = zha_device.cluster_channels[CHANNEL_ON_OFF]
+        on_off_channel = zha_device._discovery.claimed_channels["1:0x0006"]
         on_off_channel.zha_send_event(on_off_channel.cluster, COMMAND_SINGLE, [])
         await hass.async_block_till_done()
 

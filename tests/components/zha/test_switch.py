@@ -4,7 +4,7 @@ from unittest.mock import call, patch
 import zigpy.zcl.clusters.general as general
 import zigpy.zcl.foundation as zcl_f
 
-from homeassistant.components.switch import DOMAIN
+import homeassistant.components.switch as zha_switch
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 
 from .common import (
@@ -25,6 +25,9 @@ OFF = 0
 async def test_switch(hass, config_entry, zha_gateway):
     """Test zha switch platform."""
 
+    # load up switch domain
+    await hass.config_entries.async_forward_entry_setup(config_entry, zha_switch.DOMAIN)
+
     # create zigpy device
     zigpy_device = await async_init_zigpy_device(
         hass,
@@ -34,13 +37,11 @@ async def test_switch(hass, config_entry, zha_gateway):
         zha_gateway,
     )
 
-    # load up switch domain
-    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
     await hass.async_block_till_done()
 
     cluster = zigpy_device.endpoints.get(1).on_off
     zha_device = zha_gateway.get_device(zigpy_device.ieee)
-    entity_id = await find_entity_id(DOMAIN, zha_device, hass)
+    entity_id = await find_entity_id(zha_switch.DOMAIN, zha_device, hass)
     assert entity_id is not None
 
     # test that the switch was created and that its state is unavailable
@@ -72,7 +73,7 @@ async def test_switch(hass, config_entry, zha_gateway):
     ):
         # turn on via UI
         await hass.services.async_call(
-            DOMAIN, "turn_on", {"entity_id": entity_id}, blocking=True
+            zha_switch.DOMAIN, "turn_on", {"entity_id": entity_id}, blocking=True
         )
         assert len(cluster.request.mock_calls) == 1
         assert cluster.request.call_args == call(
@@ -86,7 +87,7 @@ async def test_switch(hass, config_entry, zha_gateway):
     ):
         # turn off via UI
         await hass.services.async_call(
-            DOMAIN, "turn_off", {"entity_id": entity_id}, blocking=True
+            zha_switch.DOMAIN, "turn_off", {"entity_id": entity_id}, blocking=True
         )
         assert len(cluster.request.mock_calls) == 1
         assert cluster.request.call_args == call(

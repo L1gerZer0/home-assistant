@@ -153,6 +153,7 @@ async def async_init_zigpy_device(
         await gateway.async_device_initialized(device)
     else:
         await gateway.async_device_restored(device)
+        await gateway.async_add_entities()
     await hass.async_block_till_done()
     return device
 
