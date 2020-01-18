@@ -24,14 +24,7 @@ from tests.common import mock_coro
 async def test_cover(hass, config_entry, zha_gateway):
     """Test zha cover platform."""
 
-    # create zigpy device
-    zigpy_device = await async_init_zigpy_device(
-        hass,
-        [closures.WindowCovering.cluster_id, general.Basic.cluster_id],
-        [],
-        None,
-        zha_gateway,
-    )
+    await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
 
     async def get_chan_attr(*args, **kwargs):
         return 100
@@ -40,10 +33,17 @@ async def test_cover(hass, config_entry, zha_gateway):
         "homeassistant.components.zha.core.channels.ZigbeeChannel.get_attribute_value",
         new=MagicMock(side_effect=get_chan_attr),
     ) as get_attr_mock:
+        # create zigpy device
+        zigpy_device = await async_init_zigpy_device(
+            hass,
+            [closures.WindowCovering.cluster_id, general.Basic.cluster_id],
+            [],
+            None,
+            zha_gateway,
+        )
         # load up cover domain
-        await hass.config_entries.async_forward_entry_setup(config_entry, DOMAIN)
         await hass.async_block_till_done()
-        assert get_attr_mock.call_count == 2
+        assert get_attr_mock.call_count == 4
         assert get_attr_mock.call_args[0][0] == "current_position_lift_percentage"
 
     cluster = zigpy_device.endpoints.get(1).window_covering
