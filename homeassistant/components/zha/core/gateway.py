@@ -154,7 +154,9 @@ class ZHAGateway:
     async def async_add_entities(
         self,
         entities: typing.Optional[
-            typing.Dict[str, typing.List[zha_typing.ZhaEntityType]]
+            typing.Dict[
+                str, typing.List[typing.Tuple[zha_typing.ZhaEntityType, typing.Tuple]]
+            ]
         ] = None,
     ) -> None:
         """Add entities from devices."""
@@ -185,7 +187,9 @@ class ZHAGateway:
                     "No 'async_add_entities' handler for '%s' component", component
                 )
                 continue
-            async_add_entities(ent_list, update_before_add=True)
+            async_add_entities(
+                [ent[0](*ent[1]) for ent in ent_list], update_before_add=True
+            )
 
     def device_joined(self, device):
         """Handle device joined.

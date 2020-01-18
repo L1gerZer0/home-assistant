@@ -265,7 +265,7 @@ class DiscoveryEndpoint:
                 claimed_channels = match.claim_channels(channels)
                 self.add_entity(
                     component,
-                    entity(unique_id, self._discovery.zha_device, claimed_channels),
+                    (entity, (unique_id, self._discovery.zha_device, claimed_channels)),
                 )
                 self.claim_channels(claimed_channels)
 
@@ -311,7 +311,7 @@ class DiscoveryEndpoint:
             if entity is not None:
                 self.add_entity(
                     component,
-                    entity(unique_id, self._discovery.zha_device, channel_list),
+                    (entity, (unique_id, self._discovery.zha_device, channel_list)),
                 )
                 self.claim_channels(channel_list)
 
