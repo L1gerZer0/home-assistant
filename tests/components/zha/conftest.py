@@ -49,7 +49,8 @@ async def zha_gateway_fixture(hass, config_entry):
     gateway = ZHAGateway(hass, {}, config_entry)
     gateway.zha_storage = zha_storage
     gateway.ha_device_registry = dev_reg
-    gateway.application_controller = mock.MagicMock(spec_set=ControllerApplication)
+    gateway.application_controller = mock.MagicMock(spec_set=ControllerApplication())
+    gateway.application_controller.devices = {}
     groups = zigpy.group.Groups(gateway.application_controller)
     groups.add_listener(gateway)
     groups.add_group(FIXTURE_GRP_ID, FIXTURE_GRP_NAME, suppress_event=True)

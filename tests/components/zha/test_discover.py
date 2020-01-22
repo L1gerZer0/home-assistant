@@ -1,6 +1,5 @@
 """Test zha device discovery."""
 
-import asyncio
 import re
 from unittest import mock
 
@@ -18,17 +17,33 @@ from .zha_devices_list import DEVICES
 NO_TAIL_ID = re.compile("_\\d$")
 
 
-@pytest.mark.skip(reason="until refactoring is done")
+@pytest.fixture
+def channels_mock(zha_device_mock):
+    """Channels mock factory."""
+
+    def _mock(
+        endpoints,
+        ieee="00:11:22:33:44:55:66:77",
+        manufacturer="mock manufacturer",
+        model="mock model",
+        node_desc=b"\x02@\x807\x10\x7fd\x00\x00*d\x00\x00",
+    ):
+        zha_dev = zha_device_mock(endpoints, ieee, manufacturer, model, node_desc)
+        channels = zha_channels.Channels.new(zha_dev)
+        return channels
+
+    return _mock
+
+
 @pytest.mark.parametrize("device", DEVICES)
 async def test_devices(
-    device,
-    zha_gateway: core_zha_gw.ZHAGateway,
-    hass,
-    config_entry,
-    zigpy_device_mock,
-    monkeypatch,
+    device, zha_gateway: core_zha_gw.ZHAGateway, hass, config_entry, zigpy_device_mock
 ):
     """Test device discovery."""
+
+    entity_registry = await homeassistant.helpers.entity_registry.async_get_registry(
+        hass
+    )
 
     zigpy_device = zigpy_device_mock(
         device["endpoints"],
@@ -37,55 +52,53 @@ async def test_devices(
         device["model"],
         node_desc=device["node_descriptor"],
     )
+    zha_gateway.application_controller.devices[zigpy_device.ieee] = zigpy_device
 
-    _dispatch = mock.MagicMock(wraps=disc.async_dispatch_discovery_info)
-    monkeypatch.setattr(core_zha_gw, "async_dispatch_discovery_info", _dispatch)
-    entity_registry = await homeassistant.helpers.entity_registry.async_get_registry(
-        hass
-    )
-
-    with mock.patch(
-        "homeassistant.components.zha.core.discovery._async_create_cluster_channel",
-        wraps=disc._async_create_cluster_channel,
-    ):
-        await zha_gateway.async_device_restored(zigpy_device)
+    orig_new_entity = zha_channels.EndpointChannels.async_new_entity
+    _dispatch = mock.MagicMock(wraps=orig_new_entity)
+    try:
+        zha_channels.EndpointChannels.async_new_entity = lambda *a, **kw: _dispatch(
+            *a, **kw
+        )
+        await zha_gateway.async_load_devices()
         await hass.async_block_till_done()
-        tasks = [
-            hass.config_entries.async_forward_entry_setup(config_entry, component)
-            for component in zha_const.COMPONENTS
+    finally:
+        zha_channels.EndpointChannels.async_new_entity = orig_new_entity
+
+    entity_ids = hass.states.async_entity_ids()
+    await hass.async_block_till_done()
+    zha_entities = {
+        ent for ent in entity_ids if ent.split(".")[0] in zha_const.COMPONENTS
+    }
+
+    zha_dev = zha_gateway.get_device(zigpy_device.ieee)
+    event_channels = {
+        ch.id
+        for ep_chans in zha_dev.channels.endpoints.values()
+        for ch in ep_chans.relay_channels.values()
+    }
+
+    entity_map = device["entity_map"]
+    assert zha_entities == set(
+        [
+            e["entity_id"]
+            for e in entity_map.values()
+            if not e.get("default_match", False)
         ]
-        await asyncio.gather(*tasks)
+    )
+    assert event_channels == set(device["event_channels"])
 
-        await hass.async_block_till_done()
+    for call in _dispatch.call_args_list:
+        _, component, entity_cls, unique_id, channels = call[0]
+        key = (component, unique_id)
+        entity_id = entity_registry.async_get_entity_id(component, "zha", unique_id)
 
-        entity_ids = hass.states.async_entity_ids()
-        await hass.async_block_till_done()
-        zha_entities = {
-            ent for ent in entity_ids if ent.split(".")[0] in zha_const.COMPONENTS
-        }
-
-        zha_dev = zha_gateway.get_device(zigpy_device.ieee)
-        event_channels = {  # pylint: disable=protected-access
-            ch.id for ch in zha_dev._relay_channels.values()
-        }
-
-        assert zha_entities == set(device["entities"])
-        assert event_channels == set(device["event_channels"])
-
-        entity_map = device["entity_map"]
-        for calls in _dispatch.call_args_list:
-            discovery_info = calls[0][2]
-            unique_id = discovery_info["unique_id"]
-            channels = discovery_info["channels"]
-            component = discovery_info["component"]
-            key = (component, unique_id)
-            entity_id = entity_registry.async_get_entity_id(component, "zha", unique_id)
-
-            assert key in entity_map
-            assert entity_id is not None
-            no_tail_id = NO_TAIL_ID.sub("", entity_map[key]["entity_id"])
-            assert entity_id.startswith(no_tail_id)
-            assert set([ch.name for ch in channels]) == set(entity_map[key]["channels"])
+        assert key in entity_map
+        assert entity_id is not None
+        no_tail_id = NO_TAIL_ID.sub("", entity_map[key]["entity_id"])
+        assert entity_id.startswith(no_tail_id)
+        assert set([ch.name for ch in channels]) == set(entity_map[key]["channels"])
+        assert entity_cls.__name__ == entity_map[key]["entity_class"]
 
 
 @mock.patch(
