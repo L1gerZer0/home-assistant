@@ -1,4 +1,5 @@
 """Test configuration for the ZHA component."""
+import asyncio
 from unittest import mock
 from unittest.mock import patch
 
@@ -8,7 +9,12 @@ import zigpy
 from zigpy.application import ControllerApplication
 
 from homeassistant import config_entries
-from homeassistant.components.zha.core.const import COMPONENTS, DATA_ZHA, DOMAIN
+from homeassistant.components.zha.core.const import (
+    COMPONENTS,
+    DATA_ZHA,
+    DATA_ZHA_PLATFORM_LOADED,
+    DOMAIN,
+)
 import homeassistant.components.zha.core.device as zha_core_device
 from homeassistant.components.zha.core.gateway import ZHAGateway
 from homeassistant.components.zha.core.store import async_get_registry
@@ -42,8 +48,16 @@ async def zha_gateway_fixture(hass, config_entry):
     Create a ZHAGateway object that can be used to interact with as if we
     had a real zigbee network running.
     """
+    hass.data[DATA_ZHA][DATA_ZHA_PLATFORM_LOADED] = asyncio.Event()
+    platforms = []
     for component in COMPONENTS:
-        hass.data[DATA_ZHA][component] = hass.data[DATA_ZHA].get(component, {})
+        platforms.append(
+            hass.async_create_task(
+                hass.config_entries.async_forward_entry_setup(config_entry, component)
+            )
+        )
+    await asyncio.gather(*platforms)
+    hass.data[DATA_ZHA][DATA_ZHA_PLATFORM_LOADED].set()
     zha_storage = await async_get_registry(hass)
     dev_reg = await get_dev_reg(hass)
     gateway = ZHAGateway(hass, {}, config_entry)
