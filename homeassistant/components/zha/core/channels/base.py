@@ -86,7 +86,7 @@ class ZigbeeChannel(LogMixin):
     def __init__(
         self,
         cluster: zha_typing.ZigpyClusterType,
-        ep_channels: zha_typing.EndpointChannelsType,
+        ep_channels: zha_typing.ChannelPoolType,
     ) -> None:
         """Initialize ZigbeeChannel."""
         self._channel_name = cluster.ep_attribute
@@ -282,7 +282,7 @@ class AttributeListeningChannel(ZigbeeChannel):
     def __init__(
         self,
         cluster: zha_typing.ZigpyClusterType,
-        ep_channels: zha_typing.EndpointChannelsType,
+        ep_channels: zha_typing.ChannelPoolType,
     ) -> None:
         """Initialize AttributeListeningChannel."""
         super().__init__(cluster, ep_channels)

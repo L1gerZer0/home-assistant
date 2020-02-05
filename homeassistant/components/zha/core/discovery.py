@@ -25,15 +25,13 @@ class ProbeEndpoint:
         self._device_configs = {}
 
     @callback
-    def discover_entities(self, ep_chnls: zha_typing.EndpointChannelsType) -> None:
+    def discover_entities(self, ep_chnls: zha_typing.ChannelPoolType) -> None:
         """Process an endpoint on a zigpy device."""
         self.discover_by_device_type(ep_chnls)
         self.discover_by_cluster_id(ep_chnls)
 
     @callback
-    def discover_by_device_type(
-        self, ep_channels: zha_typing.EndpointChannelsType
-    ) -> None:
+    def discover_by_device_type(self, ep_channels: zha_typing.ChannelPoolType) -> None:
         """Process an endpoint on a zigpy device."""
 
         unique_id = ep_channels.unique_id
@@ -55,9 +53,7 @@ class ProbeEndpoint:
             ep_channels.async_new_entity(component, entity, unique_id, claimed)
 
     @callback
-    def discover_by_cluster_id(
-        self, ep_channels: zha_typing.EndpointChannelsType
-    ) -> None:
+    def discover_by_cluster_id(self, ep_channels: zha_typing.ChannelPoolType) -> None:
         """Process an endpoint on a zigpy device."""
 
         remaining_channels = ep_channels.unclaimed_channels()
@@ -82,7 +78,7 @@ class ProbeEndpoint:
     def probe_single_cluster(
         component: str,
         channel: zha_typing.ChannelType,
-        ep_channels: zha_typing.EndpointChannelsType,
+        ep_channels: zha_typing.ChannelPoolType,
     ) -> None:
         """Probe specified cluster for specific component."""
         if component is None or component not in zha_const.COMPONENTS:
@@ -99,7 +95,7 @@ class ProbeEndpoint:
         ep_channels.async_new_entity(component, entity, unique_id, claimed)
 
     def handle_on_off_output_cluster_exception(
-        self, ep_channels: zha_typing.EndpointChannelsType
+        self, ep_channels: zha_typing.ChannelPoolType
     ) -> None:
         """Process output clusters of the endpoint."""
 

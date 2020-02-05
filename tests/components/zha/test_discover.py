@@ -54,16 +54,14 @@ async def test_devices(
     )
     zha_gateway.application_controller.devices[zigpy_device.ieee] = zigpy_device
 
-    orig_new_entity = zha_channels.EndpointChannels.async_new_entity
+    orig_new_entity = zha_channels.ChannelPool.async_new_entity
     _dispatch = mock.MagicMock(wraps=orig_new_entity)
     try:
-        zha_channels.EndpointChannels.async_new_entity = lambda *a, **kw: _dispatch(
-            *a, **kw
-        )
+        zha_channels.ChannelPool.async_new_entity = lambda *a, **kw: _dispatch(*a, **kw)
         await zha_gateway.async_load_devices()
         await hass.async_block_till_done()
     finally:
-        zha_channels.EndpointChannels.async_new_entity = orig_new_entity
+        zha_channels.ChannelPool.async_new_entity = orig_new_entity
 
     entity_ids = hass.states.async_entity_ids()
     await hass.async_block_till_done()
@@ -74,7 +72,7 @@ async def test_devices(
     zha_dev = zha_gateway.get_device(zigpy_device.ieee)
     event_channels = {
         ch.id
-        for ep_chans in zha_dev.channels.endpoints.values()
+        for ep_chans in zha_dev.channels.pools.values()
         for ch in ep_chans.relay_channels.values()
     }
 
@@ -129,7 +127,7 @@ def test_discover_entities(m1, m2):
 def test_discover_by_device_type(device_type, component, hit):
     """Test entity discovery by device type."""
 
-    ep_channels = mock.MagicMock(spec_set=zha_channels.EndpointChannels)
+    ep_channels = mock.MagicMock(spec_set=zha_channels.ChannelPool)
     ep_mock = mock.PropertyMock()
     ep_mock.return_value.profile_id = 0x0104
     ep_mock.return_value.device_type = device_type
@@ -155,7 +153,7 @@ def test_discover_by_device_type(device_type, component, hit):
 def test_discover_by_device_type_override():
     """Test entity discovery by device type overriding."""
 
-    ep_channels = mock.MagicMock(spec_set=zha_channels.EndpointChannels)
+    ep_channels = mock.MagicMock(spec_set=zha_channels.ChannelPool)
     ep_mock = mock.PropertyMock()
     ep_mock.return_value.profile_id = 0x0104
     ep_mock.return_value.device_type = 0x0100
@@ -182,7 +180,7 @@ def test_discover_by_device_type_override():
 def test_discover_probe_single_cluster():
     """Test entity discovery by single cluster."""
 
-    ep_channels = mock.MagicMock(spec_set=zha_channels.EndpointChannels)
+    ep_channels = mock.MagicMock(spec_set=zha_channels.ChannelPool)
     ep_mock = mock.PropertyMock()
     ep_mock.return_value.profile_id = 0x0104
     ep_mock.return_value.device_type = 0x0100
@@ -222,11 +220,7 @@ async def test_discover_endpoint(device_info, channels_mock, hass):
         )
 
     assert device_info["event_channels"] == sorted(
-        [
-            ch.id
-            for ep in channels.endpoints.values()
-            for ch in ep.relay_channels.values()
-        ]
+        [ch.id for ep in channels.pools.values() for ch in ep.relay_channels.values()]
     )
     assert new_ent.call_count == len(
         [
